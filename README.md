@@ -171,14 +171,17 @@ If the rendered filename omits an extension, `.md` is appended automatically.
 | **`warning`**       | ✅ Fully Supported          | Converted to blockquote with ⚠️ Warning prefix                      |
 | **`note`**          | ✅ Fully Supported          | Converted to blockquote with 📝 Note prefix                         |
 | **`tip`**           | ✅ Fully Supported          | Converted to blockquote with 💡 Tip prefix                          |
-| **`code`**          | ✅ Fully Supported          | Converted to markdown code blocks with language syntax highlighting |
+| **`code`**          | ✅ Fully Supported          | Converted to markdown code blocks with optional `**title**` caption |
+| **`jira`**          | ⚠️ Partially Supported      | Emits the issue key, linking it when Jira URL can be derived        |
 | **`mermaid-cloud`** | ✅ Fully Supported          | Converted to mermaid code blocks                                    |
 | **`expand`**        | ✅ Fully Supported          | Content extracted and rendered directly                             |
 | **`details`**       | ✅ Fully Supported          | Content extracted and rendered directly                             |
 | **`status`**        | ✅ Fully Supported          | Converted to emoji badges (🔴 **S1**, 🟡, 🟢, 🔵, ⚪)               |
 | **`toc`**           | ⚠️ Partially Supported      | Converted to `<!-- Table of Contents -->` comment                   |
 | **`children`**      | ⚠️ Partially Supported      | Converted to `<!-- Child Pages -->` comment                         |
-| **Other macros**    | Plan to support per request | Converted to `<!-- Unsupported macro: {name} -->` comments          |
+| **Other macros**    | Plan to support per request | Converted to visible `**Unsupported macro:** \`{name}\`` markers    |
+
+If a Confluence `code` macro includes a `title` parameter, `confluence-md` writes a bold caption line such as `**main.go**` above the fenced code block. When converting pages via the `page` or `tree` commands, `jira` issue keys are linked by deriving a Jira base URL from the Confluence base URL when possible, for example `confluence.example.com` -> `jira.example.com` and `example.atlassian.net/wiki` -> `example.atlassian.net`. Unsupported macros such as `drawio`, and unsupported `jira` variants without a usable `key`, remain visible in Markdown output instead of being hidden inside HTML comments.
 
 ### User Name Resolution
 

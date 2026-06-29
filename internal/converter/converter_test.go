@@ -78,6 +78,78 @@ func TestConverterConvertPage(t *testing.T) {
 	}
 }
 
+func TestConverterConvertPageDerivesJiraLinks(t *testing.T) {
+	conv := NewConverter(nil)
+	page := &confModel.ConfluencePage{
+		ID:       "123",
+		Title:    "Jira Page",
+		SpaceKey: "SPACE",
+		Version:  1,
+		Content: confModel.ConfluenceContent{
+			Storage: confModel.ContentStorage{
+				Value: `<p>Before <ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">ENG-123</ac:parameter></ac:structured-macro> after</p>`,
+			},
+		},
+		CreatedBy: confModel.User{DisplayName: "Author"},
+		UpdatedBy: confModel.User{DisplayName: "Editor"},
+	}
+	page.Content.Storage.Representation = "storage"
+	page.CreatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	page.UpdatedAt = time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	doc, err := conv.ConvertPage(page, "https://confluence.example.com", ".")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "Before [ENG-123](https://jira.example.com/browse/ENG-123) after"
+	if !strings.Contains(doc.Content, want) {
+		t.Fatalf("expected jira link %q in markdown, got %q", want, doc.Content)
+	}
+}
+
+func TestConverterConvertHTMLPreservesInlineJiraSpacingWithoutBaseURL(t *testing.T) {
+	conv := NewConverter(nil)
+
+	got, err := conv.ConvertHTML(`<p>Before <ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">ENG-123</ac:parameter></ac:structured-macro> after</p>`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "Before ENG-123 after"
+	if got != want {
+		t.Fatalf("expected inline jira markdown %q, got %q", want, got)
+	}
+}
+
+func TestConverterConvertHTMLPreservesInlineUnsupportedMacroSpacing(t *testing.T) {
+	conv := NewConverter(nil)
+
+	got, err := conv.ConvertHTML(`<p>Before <ac:structured-macro ac:name="drawio"></ac:structured-macro> after</p>`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "Before **Unsupported macro:** `drawio` after"
+	if got != want {
+		t.Fatalf("expected inline unsupported macro markdown %q, got %q", want, got)
+	}
+}
+
+func TestConverterConvertHTMLPreservesInlineJiraPunctuation(t *testing.T) {
+	conv := NewConverter(nil)
+
+	got, err := conv.ConvertHTML(`<p>Before (<ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">ENG-123</ac:parameter></ac:structured-macro>), after</p>`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "Before (ENG-123), after"
+	if got != want {
+		t.Fatalf("expected inline jira markdown with punctuation %q, got %q", want, got)
+	}
+}
+
 func TestConverterDownloadImages(t *testing.T) {
 	data := []byte("image-bytes")
 	attachment := &confModel.ConfluenceAttachment{Title: "diagram.png", MediaType: "image/png", FileSize: int64(len(data))}

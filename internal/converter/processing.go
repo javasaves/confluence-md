@@ -8,11 +8,13 @@ import (
 
 	"github.com/jackchuka/confluence-md/internal/converter/model"
 	"github.com/jackchuka/confluence-md/internal/converter/plugin"
+	htmlnode "golang.org/x/net/html"
 )
 
 // convertHtml converts raw Confluence HTML into Markdown text.
 func (c *Converter) convertHtml(html string) (string, error) {
 	processedHTML := c.preprocessCDATA(html)
+	processedHTML = rewriteInlineStructuredMacros(processedHTML)
 
 	md, err := c.mdConverter.ConvertString(processedHTML)
 	if err != nil {
@@ -87,4 +89,58 @@ func (c *Converter) preprocessCDATA(html string) string {
 		}
 		return match
 	})
+}
+
+func rewriteInlineStructuredMacros(markup string) string {
+	context := &htmlnode.Node{Type: htmlnode.ElementNode, Data: "body"}
+	nodes, err := htmlnode.ParseFragment(strings.NewReader(markup), context)
+	if err != nil {
+		return markup
+	}
+
+	for _, node := range nodes {
+		rewriteInlineStructuredMacroNodes(node)
+	}
+
+	var buf strings.Builder
+	for _, node := range nodes {
+		_ = htmlnode.Render(&buf, node)
+	}
+
+	return buf.String()
+}
+
+func rewriteInlineStructuredMacroNodes(n *htmlnode.Node) {
+	if n == nil {
+		return
+	}
+
+	if n.Type == htmlnode.ElementNode &&
+		n.Data == "ac:structured-macro" &&
+		shouldRenderMacroInline(extractMacroNameFromNode(n)) {
+		n.Data = "ac:inline-structured-macro"
+	}
+
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		rewriteInlineStructuredMacroNodes(child)
+	}
+}
+
+func extractMacroNameFromNode(n *htmlnode.Node) string {
+	for _, attr := range n.Attr {
+		if attr.Key == "ac:name" {
+			return strings.TrimSpace(strings.ToLower(attr.Val))
+		}
+	}
+
+	return ""
+}
+
+func shouldRenderMacroInline(name string) bool {
+	switch strings.TrimSpace(strings.ToLower(name)) {
+	case "info", "warning", "note", "tip", "code", "mermaid-cloud", "expand", "details", "toc", "children":
+		return false
+	default:
+		return true
+	}
 }

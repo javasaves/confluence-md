@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/PuerkitoBio/goquery"
@@ -19,6 +20,7 @@ type ConfluencePlugin struct {
 	imageFolder        string
 	attachmentResolver attachments.Resolver
 	client             confluence.Client
+	confluenceBaseURL  string
 	currentPage        *model.ConfluencePage
 	userCache          map[string]string // accountID -> displayName
 }
@@ -40,6 +42,11 @@ func NewConfluencePluginWithClient(client confluence.Client, resolver attachment
 		client:             client,
 		userCache:          make(map[string]string),
 	}
+}
+
+// SetBaseURL records which Confluence base URL is being converted.
+func (p *ConfluencePlugin) SetBaseURL(baseURL string) {
+	p.confluenceBaseURL = strings.TrimSpace(baseURL)
 }
 
 // SetCurrentPage records which page is currently being converted
@@ -133,6 +140,7 @@ func (p *ConfluencePlugin) Init(conv *converter.Converter) error {
 	conv.Register.RendererFor("ac:image", converter.TagTypeInline, p.handleImage, converter.PriorityStandard)
 	conv.Register.RendererFor("ac:emoticon", converter.TagTypeInline, p.handleEmoticon, converter.PriorityStandard)
 	conv.Register.RendererFor("ac:structured-macro", converter.TagTypeBlock, p.handleMacro, converter.PriorityStandard)
+	conv.Register.RendererFor("ac:inline-structured-macro", converter.TagTypeInline, p.handleMacro, converter.PriorityStandard)
 	conv.Register.RendererFor("ac:link", converter.TagTypeInline, p.handleLink, converter.PriorityStandard)
 	conv.Register.RendererFor("ac:inline-comment-marker", converter.TagTypeInline, p.handleInlineComment, converter.PriorityStandard)
 	conv.Register.RendererFor("ac:placeholder", converter.TagTypeInline, p.handlePlaceholder, converter.PriorityStandard)
@@ -585,6 +593,8 @@ func (p *ConfluencePlugin) handleMacro(ctx converter.Context, w converter.Writer
 		result = p.handleBlockquoteMacro(ctx, n, "💡", "Tip")
 	case "code":
 		result = p.handleCodeMacro(n)
+	case "jira":
+		result = p.handleJiraMacro(n)
 	case "mermaid-cloud":
 		result = p.handleMermaidMacro(n)
 	case "expand":
@@ -598,14 +608,209 @@ func (p *ConfluencePlugin) handleMacro(ctx converter.Context, w converter.Writer
 	case "children":
 		result = "<!-- Child Pages -->"
 	default:
-		result = fmt.Sprintf("<!-- Unsupported macro: %s -->", macroName)
+		result = visibleUnsupportedMacro(macroName, "")
 	}
 
+	result = formatInlineStructuredMacroResult(n, macroName, result)
 	_, _ = w.WriteString(result)
 	if tryNext {
 		return converter.RenderTryNext
 	}
 	return converter.RenderSuccess
+}
+
+func formatInlineStructuredMacroResult(n *html.Node, macroName, result string) string {
+	if n == nil || strings.TrimSpace(result) == "" || !isInlineSafeMacro(macroName) {
+		return result
+	}
+
+	if n.Data != "ac:inline-structured-macro" && !isInlineStructuredMacroContext(n.Parent) {
+		return result
+	}
+
+	if needsLeadingInlineMacroSpace(n.PrevSibling) {
+		result = " " + result
+	}
+	if needsTrailingInlineMacroSpace(n.NextSibling) {
+		result += " "
+	}
+
+	return result
+}
+
+func isInlineSafeMacro(name string) bool {
+	switch strings.TrimSpace(strings.ToLower(name)) {
+	case "info", "warning", "note", "tip", "code", "mermaid-cloud", "expand", "details", "toc", "children":
+		return false
+	default:
+		return true
+	}
+}
+
+func isInlineStructuredMacroContext(parent *html.Node) bool {
+	if parent == nil || parent.Type != html.ElementNode {
+		return false
+	}
+
+	switch parent.Data {
+	case "p", "span", "strong", "b", "em", "i", "u", "s", "del", "a", "li", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6":
+		return true
+	default:
+		return false
+	}
+}
+
+func needsLeadingInlineMacroSpace(prev *html.Node) bool {
+	r, ok := lastVisibleRune(prev)
+	if !ok {
+		return false
+	}
+
+	return !strings.ContainsRune("([{/\\", r)
+}
+
+func needsTrailingInlineMacroSpace(next *html.Node) bool {
+	r, ok := firstVisibleRune(next)
+	if !ok {
+		return false
+	}
+
+	return !strings.ContainsRune(")]}.,;:!?/\\", r)
+}
+
+func firstVisibleRune(n *html.Node) (rune, bool) {
+	if n == nil {
+		return 0, false
+	}
+
+	switch n.Type {
+	case html.TextNode:
+		return firstNonSpaceRune(n.Data)
+	case html.ElementNode:
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			if r, ok := firstVisibleRune(child); ok {
+				return r, true
+			}
+		}
+	}
+
+	return 0, false
+}
+
+func lastVisibleRune(n *html.Node) (rune, bool) {
+	if n == nil {
+		return 0, false
+	}
+
+	switch n.Type {
+	case html.TextNode:
+		return lastNonSpaceRune(n.Data)
+	case html.ElementNode:
+		for child := n.LastChild; child != nil; child = child.PrevSibling {
+			if r, ok := lastVisibleRune(child); ok {
+				return r, true
+			}
+		}
+	}
+
+	return 0, false
+}
+
+func firstNonSpaceRune(s string) (rune, bool) {
+	for _, r := range s {
+		if !unicode.IsSpace(r) {
+			return r, true
+		}
+	}
+
+	return 0, false
+}
+
+func lastNonSpaceRune(s string) (rune, bool) {
+	runes := []rune(s)
+	for i := len(runes) - 1; i >= 0; i-- {
+		if !unicode.IsSpace(runes[i]) {
+			return runes[i], true
+		}
+	}
+
+	return 0, false
+}
+
+func visibleUnsupportedMacro(name, detail string) string {
+	message := fmt.Sprintf("**Unsupported macro:** `%s`", name)
+	if strings.TrimSpace(detail) != "" {
+		message = fmt.Sprintf("%s (%s)", message, detail)
+	}
+	return message
+}
+
+func deriveJiraBaseURL(confluenceBaseURL string) (string, bool) {
+	trimmed := strings.TrimSpace(confluenceBaseURL)
+	if trimmed == "" {
+		return "", false
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", false
+	}
+
+	changed := false
+	hostParts := strings.Split(parsed.Hostname(), ".")
+	for i, part := range hostParts {
+		if strings.EqualFold(part, "confluence") {
+			hostParts[i] = "jira"
+			changed = true
+			break
+		}
+	}
+
+	if changed {
+		parsed.Host = strings.Join(hostParts, ".")
+		if port := parsed.Port(); port != "" {
+			parsed.Host += ":" + port
+		}
+	}
+
+	switch strings.TrimSuffix(parsed.Path, "/") {
+	case "/wiki":
+		parsed.Path = ""
+		parsed.RawPath = ""
+		changed = true
+	case "/confluence":
+		parsed.Path = "/jira"
+		parsed.RawPath = ""
+		changed = true
+	}
+
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+
+	if !changed {
+		return "", false
+	}
+
+	return strings.TrimSuffix(parsed.String(), "/"), true
+}
+
+func buildJiraIssueURL(confluenceBaseURL, issueKey string) (string, bool) {
+	jiraBaseURL, ok := deriveJiraBaseURL(confluenceBaseURL)
+	if !ok {
+		return "", false
+	}
+
+	parsed, err := url.Parse(jiraBaseURL)
+	if err != nil {
+		return "", false
+	}
+
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + "/browse/" + url.PathEscape(issueKey)
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+
+	return parsed.String(), true
 }
 
 func (p *ConfluencePlugin) handleBlockquoteMacro(ctx converter.Context, n *html.Node, emoji, label string) string {
@@ -643,17 +848,46 @@ func (p *ConfluencePlugin) handleCodeMacro(n *html.Node) string {
 	}
 	selection := doc.Selection
 	rawHTML, _ := selection.Html()
-	language := extractLanguageParameter(rawHTML)
+	language := extractMacroParameter(selection, "language")
+	title := extractMacroParameter(selection, "title")
 
 	code := extractPlainTextBodyContent(selection, rawHTML)
 	if code == "" {
 		code = extractCodeContent(rawHTML)
 	}
 
-	if language != "" {
-		return fmt.Sprintf("```%s\n%s\n```\n", language, code)
+	var result strings.Builder
+	if title != "" {
+		result.WriteString(fmt.Sprintf("**%s**\n", title))
 	}
-	return fmt.Sprintf("```\n%s\n```\n", code)
+
+	if language != "" {
+		result.WriteString(fmt.Sprintf("```%s\n%s\n```\n", language, code))
+		return result.String()
+	}
+	result.WriteString(fmt.Sprintf("```\n%s\n```\n", code))
+	return result.String()
+}
+
+func (p *ConfluencePlugin) handleJiraMacro(n *html.Node) string {
+	var buf strings.Builder
+	_ = html.Render(&buf, n)
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(buf.String()))
+	if err != nil {
+		return fmt.Sprintf("<!-- Error rendering macro: %s -->", err.Error())
+	}
+	selection := doc.Selection
+
+	key := extractMacroParameter(selection, "key")
+	if key == "" {
+		return visibleUnsupportedMacro("jira", "missing `key` parameter")
+	}
+
+	if issueURL, ok := buildJiraIssueURL(p.confluenceBaseURL, key); ok {
+		return fmt.Sprintf("[%s](%s)", key, issueURL)
+	}
+
+	return key
 }
 
 func (p *ConfluencePlugin) handleMermaidMacro(n *html.Node) string {

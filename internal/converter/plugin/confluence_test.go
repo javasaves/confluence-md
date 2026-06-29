@@ -127,6 +127,117 @@ func TestHandleCodeMacro(t *testing.T) {
 	}
 }
 
+func TestHandleCodeMacroWithTitleAndLanguage(t *testing.T) {
+	plugin := &ConfluencePlugin{}
+	node := findNode(t, `<ac:structured-macro ac:name="code"><ac:parameter ac:name="title">main.go</ac:parameter><ac:parameter ac:name="language">go</ac:parameter><ac:plain-text-body><!--[CDATA[fmt.Println(&quot;ok&quot;)]]></ac:plain-text-body></ac:structured-macro>`, "ac:structured-macro")
+	result := plugin.handleCodeMacro(node)
+	expected := "**main.go**\n```go\nfmt.Println(\"ok\")\n```\n"
+	if result != expected {
+		t.Fatalf("unexpected titled code block: %q", result)
+	}
+}
+
+func TestHandleCodeMacroWithTitleWithoutLanguage(t *testing.T) {
+	plugin := &ConfluencePlugin{}
+	node := findNode(t, `<ac:structured-macro ac:name="code"><ac:parameter ac:name="title">main.go</ac:parameter><ac:plain-text-body><!--[CDATA[fmt.Println(&quot;ok&quot;)]]></ac:plain-text-body></ac:structured-macro>`, "ac:structured-macro")
+	result := plugin.handleCodeMacro(node)
+	expected := "**main.go**\n```\nfmt.Println(\"ok\")\n```\n"
+	if result != expected {
+		t.Fatalf("unexpected titled code block without language: %q", result)
+	}
+}
+
+func TestHandleMacroJiraWithKey(t *testing.T) {
+	plugin := &ConfluencePlugin{}
+	result := renderMacro(t, plugin, `<ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">ENG-123</ac:parameter></ac:structured-macro>`)
+	if result != "ENG-123" {
+		t.Fatalf("unexpected jira output: %q", result)
+	}
+}
+
+func TestHandleMacroJiraWithDerivedLink(t *testing.T) {
+	plugin := &ConfluencePlugin{}
+	plugin.SetBaseURL("https://confluence.example.com")
+	result := renderMacro(t, plugin, `<ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">ENG-123</ac:parameter></ac:structured-macro>`)
+	expected := "[ENG-123](https://jira.example.com/browse/ENG-123)"
+	if result != expected {
+		t.Fatalf("unexpected jira link output: %q", result)
+	}
+}
+
+func TestHandleMacroJiraWithoutKeyUsesVisibleFallback(t *testing.T) {
+	plugin := &ConfluencePlugin{}
+	result := renderMacro(t, plugin, `<ac:structured-macro ac:name="jira"><ac:parameter ac:name="server">jira</ac:parameter></ac:structured-macro>`)
+	expected := "**Unsupported macro:** `jira` (missing `key` parameter)"
+	if result != expected {
+		t.Fatalf("unexpected jira fallback: %q", result)
+	}
+}
+
+func TestDeriveJiraBaseURL(t *testing.T) {
+	tests := []struct {
+		name          string
+		confluenceURL string
+		want          string
+		wantOK        bool
+	}{
+		{
+			name:          "replace confluence subdomain",
+			confluenceURL: "https://confluence.example.com",
+			want:          "https://jira.example.com",
+			wantOK:        true,
+		},
+		{
+			name:          "remove atlassian wiki path",
+			confluenceURL: "https://example.atlassian.net/wiki",
+			want:          "https://example.atlassian.net",
+			wantOK:        true,
+		},
+		{
+			name:          "replace confluence path",
+			confluenceURL: "https://wiki.example.com/confluence",
+			want:          "https://wiki.example.com/jira",
+			wantOK:        true,
+		},
+		{
+			name:          "no derivation for unrelated host",
+			confluenceURL: "https://wiki.example.com/docs",
+			want:          "",
+			wantOK:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := deriveJiraBaseURL(tt.confluenceURL)
+			if ok != tt.wantOK {
+				t.Fatalf("deriveJiraBaseURL(%q) ok = %v, want %v", tt.confluenceURL, ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Fatalf("deriveJiraBaseURL(%q) = %q, want %q", tt.confluenceURL, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHandleMacroUnsupportedFallbackIsVisible(t *testing.T) {
+	plugin := &ConfluencePlugin{}
+	result := renderMacro(t, plugin, `<ac:structured-macro ac:name="custom-macro"></ac:structured-macro>`)
+	expected := "**Unsupported macro:** `custom-macro`"
+	if result != expected {
+		t.Fatalf("unexpected unsupported fallback: %q", result)
+	}
+}
+
+func TestHandleMacroDrawioUsesVisibleUnsupportedFallback(t *testing.T) {
+	plugin := &ConfluencePlugin{}
+	result := renderMacro(t, plugin, `<ac:structured-macro ac:name="drawio"></ac:structured-macro>`)
+	expected := "**Unsupported macro:** `drawio`"
+	if result != expected {
+		t.Fatalf("unexpected drawio fallback: %q", result)
+	}
+}
+
 func TestHandleMermaidCloudMacro(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockResolver := mock_attachments.NewMockResolver(ctrl)
@@ -150,6 +261,17 @@ func TestHandleMermaidCloudMacroMissingResolver(t *testing.T) {
 	if !strings.Contains(result, "Mermaid attachment diagram unavailable") {
 		t.Fatalf("expected unavailable message, got %q", result)
 	}
+}
+
+func renderMacro(t *testing.T, plugin *ConfluencePlugin, markup string) string {
+	t.Helper()
+	node := findNode(t, markup, "ac:structured-macro")
+	var out strings.Builder
+	status := plugin.handleMacro(nil, &out, node)
+	if status != convpkg.RenderSuccess {
+		t.Fatalf("expected render success, got %v", status)
+	}
+	return out.String()
 }
 
 func findNode(t *testing.T, markup, tag string) *htmldom.Node {

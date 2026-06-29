@@ -73,6 +73,7 @@ func NewConverter(client confluence.Client, opts ...Option) *Converter {
 
 // ConvertHTML converts raw HTML string to Markdown
 func (c *Converter) ConvertHTML(html string) (string, error) {
+	c.plugin.SetBaseURL("")
 	return c.convertHtml(html)
 }
 
@@ -85,6 +86,7 @@ func (c *Converter) ConvertPage(
 	if err := page.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid page: %w", err)
 	}
+	c.plugin.SetBaseURL(baseURL)
 	c.plugin.SetCurrentPage(page)
 
 	// Create markdown document
