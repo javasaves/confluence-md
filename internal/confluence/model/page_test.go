@@ -88,13 +88,34 @@ func TestConfluencePageValidate(t *testing.T) {
 
 func TestConfluencePageGetURL(t *testing.T) {
 	page := validPage()
-	url, err := page.GetURL("https://example.atlassian.net")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+
+	tests := []struct {
+		name    string
+		baseURL string
+		want    string
+	}{
+		{
+			name:    "root context",
+			baseURL: "https://example.atlassian.net",
+			want:    "https://example.atlassian.net/spaces/SPACE/pages/123/Sample",
+		},
+		{
+			name:    "wiki context",
+			baseURL: "https://example.atlassian.net/wiki",
+			want:    "https://example.atlassian.net/wiki/spaces/SPACE/pages/123/Sample",
+		},
 	}
-	want := "https://example.atlassian.net/wiki/spaces/SPACE/pages/123/Sample"
-	if url != want {
-		t.Fatalf("unexpected url: %s want %s", url, want)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := page.GetURL(tt.baseURL)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("unexpected url: %s want %s", got, tt.want)
+			}
+		})
 	}
 }
 

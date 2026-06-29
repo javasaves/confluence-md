@@ -40,13 +40,16 @@ This command fetches a page and all its descendants up to a specified depth,
 converting them to Markdown while preserving the hierarchy structure.
 
 Examples:
-  # Convert a page tree using URL
-  confluence-md tree https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title
+  # Convert using Bearer auth (default)
+  confluence-md tree https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token
 
-  confluence-md tree https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --depth 2
+  # Convert using Basic auth
+  confluence-md tree https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --basic-auth --email john.doe@company.com --api-token your-api-token
+
+  confluence-md tree https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token --depth 2
 
   # Preview what would be converted
-  confluence-md tree https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --dry-run`,
+  confluence-md tree https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token --dry-run`,
 	RunE: runTreeCommand,
 }
 
@@ -55,10 +58,6 @@ func init() {
 
 	treeOpts.authOptions.InitFlags(treeCmd)
 	treeOpts.commonOptions.InitFlags(treeCmd)
-
-	// Required flags
-	_ = treeCmd.MarkFlagRequired("api-token")
-	_ = treeCmd.MarkFlagRequired("email")
 
 	// Processing flags
 	treeCmd.Flags().IntVar(&treeOpts.MaxDepth, "depth", -1, "Maximum depth to traverse (-1 for unlimited)")
@@ -85,13 +84,17 @@ func runTreeCommand(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid options: %w", err)
 	}
 
+	if err := treeOpts.authOptions.Validate(); err != nil {
+		return fmt.Errorf("invalid authentication options: %w", err)
+	}
+
 	namer, err := buildOutputNamer(treeOpts.OutputNameTemplate)
 	if err != nil {
 		return fmt.Errorf("invalid output name template: %w", err)
 	}
 	treeOpts.OutputNamer = namer
 
-	client := confluence.NewClient(pageInfo.BaseURL, treeOpts.Email, treeOpts.APIKey)
+	client := confluence.NewClient(pageInfo.BaseURL, treeOpts.authOptions.AuthConfig())
 
 	if treeOpts.DryRun {
 		fmt.Println("🔍 Dry run mode - analyzing page tree...")

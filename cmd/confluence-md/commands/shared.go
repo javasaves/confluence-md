@@ -122,25 +122,36 @@ func urlToPageInfo(pageURL string) (confluenceModel.PageURLInfo, error) {
 		return confluenceModel.PageURLInfo{}, fmt.Errorf("invalid URL: %w", err)
 	}
 
-	baseURL := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	basePath := ""
+	spaceKeyIndex := -1
 	var pageID string
 	var spaceKey string
 	var title string
 
 	// Extract page ID from path
-	// Path format: /wiki/spaces/SPACE/pages/12345/Title
-	parts := strings.Split(u.Path, "/")
-	for i, part := range parts {
-		if part == "spaces" && i+1 < len(parts) {
-			spaceKey = parts[i+1]
+	// Path formats:
+	//   /spaces/SPACE/pages/12345/Title
+	//   /wiki/spaces/SPACE/pages/12345/Title
+	//   /confluence/spaces/SPACE/pages/12345/Title
+	for i, part := range pathParts {
+		if part == "spaces" && i+1 < len(pathParts) {
+			spaceKey = pathParts[i+1]
+			spaceKeyIndex = i
 		}
-		if part == "pages" && i+1 < len(parts) {
-			pageID = parts[i+1]
+		if part == "pages" && i+1 < len(pathParts) {
+			pageID = pathParts[i+1]
 		}
-		if i == len(parts)-1 {
+		if i == len(pathParts)-1 {
 			title = part
 		}
 	}
+
+	if spaceKeyIndex > 0 {
+		basePath = "/" + strings.Join(pathParts[:spaceKeyIndex], "/")
+	}
+
+	baseURL := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, basePath)
 
 	if pageID == "" {
 		return confluenceModel.PageURLInfo{}, fmt.Errorf("could not extract page ID from URL")

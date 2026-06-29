@@ -45,7 +45,7 @@ func (c *Converter) extractImageReferences(html, pageID, baseURL string) []model
 		}
 
 		encodedFilename := url.QueryEscape(fileName)
-		actualURL := fmt.Sprintf("%s/wiki/download/attachments/%s/%s",
+		actualURL := fmt.Sprintf("%s/download/attachments/%s/%s",
 			strings.TrimSuffix(baseURL, "/"), pageID, encodedFilename)
 
 		imageRefs = append(imageRefs, model.ImageRef{
@@ -59,7 +59,7 @@ func (c *Converter) extractImageReferences(html, pageID, baseURL string) []model
 
 // fixMarkdownLinks converts Confluence-specific links into internal references.
 func fixMarkdownLinks(markdown string) string {
-	confLinkRegex := regexp.MustCompile(`\[([^\]]+)\]\(/wiki/spaces/([^/]+)/pages/(\d+)/[^)]+\)`)
+	confLinkRegex := regexp.MustCompile(`\[([^\]]+)\]\((?:/[^)/]+)*/spaces/([^/]+)/pages/(\d+)/[^)]+\)`)
 	return confLinkRegex.ReplaceAllString(markdown, "[$1](confluence://pageId/$3)")
 }
 

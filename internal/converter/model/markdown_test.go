@@ -19,7 +19,7 @@ func TestMarkdownDocumentWithFrontmatter(t *testing.T) {
 				PageID:   "123",
 				SpaceKey: "SPACE",
 				Version:  5,
-				URL:      "https://example/wiki/spaces/SPACE/pages/123/Sample",
+				URL:      "https://example/spaces/SPACE/pages/123/Sample",
 			},
 			Custom: map[string]any{"custom": "value"},
 		},
@@ -64,7 +64,7 @@ func TestNewMarkdownDocument(t *testing.T) {
 		UpdatedAt: time.Date(2024, 2, 3, 4, 5, 6, 0, time.UTC),
 	}
 
-	doc, err := NewMarkdownDocument(page, "https://example.atlassian.net")
+	doc, err := NewMarkdownDocument(page, "https://example.atlassian.net/wiki")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

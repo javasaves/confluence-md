@@ -228,10 +228,34 @@ func TestConverterPreprocessCDATA(t *testing.T) {
 }
 
 func TestFixMarkdownLinks(t *testing.T) {
-	input := "See [Page](/wiki/spaces/SPACE/pages/12345/Some-Page) for details"
-	want := "See [Page](confluence://pageId/12345) for details"
-	if got := fixMarkdownLinks(input); got != want {
-		t.Fatalf("fixMarkdownLinks(%q) = %q, want %q", input, got, want)
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "root context",
+			input: "See [Page](/spaces/SPACE/pages/12345/Some-Page) for details",
+			want:  "See [Page](confluence://pageId/12345) for details",
+		},
+		{
+			name:  "wiki context",
+			input: "See [Page](/wiki/spaces/SPACE/pages/12345/Some-Page) for details",
+			want:  "See [Page](confluence://pageId/12345) for details",
+		},
+		{
+			name:  "custom context",
+			input: "See [Page](/confluence/spaces/SPACE/pages/12345/Some-Page) for details",
+			want:  "See [Page](confluence://pageId/12345) for details",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fixMarkdownLinks(tt.input); got != tt.want {
+				t.Fatalf("fixMarkdownLinks(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 

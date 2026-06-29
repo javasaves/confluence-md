@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -96,8 +97,8 @@ func (cp *ConfluencePage) GetURL(baseURL string) (string, error) {
 		return "", fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	pageURL := fmt.Sprintf("%s/wiki/spaces/%s/pages/%s/%s",
-		base.String(), cp.SpaceKey, cp.ID, url.PathEscape(cp.Title))
+	pageURL := fmt.Sprintf("%s/spaces/%s/pages/%s/%s",
+		strings.TrimSuffix(base.String(), "/"), cp.SpaceKey, cp.ID, url.PathEscape(cp.Title))
 
 	return pageURL, nil
 }

@@ -15,18 +15,21 @@ var pageCmd = &cobra.Command{
 	Short: "Convert a single Confluence page to Markdown",
 	Long: `Convert a single Confluence page to Markdown format.
 
-Provide the page URL and your API token to download and convert the page.
+Provide the page URL and your authentication credentials to download and convert the page.
 The converted content is saved to an output directory with images in an assets folder.
 
 Examples:
-  # Convert to default output directory
-  confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title
+  # Convert using Bearer auth (default)
+  confluence-md page https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token
+
+  # Convert using Basic auth
+  confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --basic-auth --email john.doe@company.com --api-token your-api-token
 
   # Convert to custom directory
-  confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --output ./docs
+  confluence-md page https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token --output ./docs
 
   # Convert without downloading images
-  confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --download-images=false`,
+  confluence-md page https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token --download-images=false`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runPage(cmd, args)
@@ -47,16 +50,16 @@ func init() {
 
 	pageOpts.authOptions.InitFlags(pageCmd)
 	pageOpts.commonOptions.InitFlags(pageCmd)
-
-	// Required flags
-	_ = pageCmd.MarkFlagRequired("api-token")
-	_ = pageCmd.MarkFlagRequired("email")
 }
 
 func runPage(_ *cobra.Command, args []string) error {
 	// Get required flags
 	if len(args) < 1 {
 		return fmt.Errorf("missing required argument: page URL")
+	}
+
+	if err := pageOpts.authOptions.Validate(); err != nil {
+		return fmt.Errorf("invalid authentication options: %w", err)
 	}
 	pageURL := args[0]
 
@@ -73,7 +76,7 @@ func runPage(_ *cobra.Command, args []string) error {
 	pageOpts.OutputNamer = namer
 
 	// Create Confluence client
-	client := confluence.NewClient(pageInfo.BaseURL, pageOpts.Email, pageOpts.APIKey)
+	client := confluence.NewClient(pageInfo.BaseURL, pageOpts.authOptions.AuthConfig())
 
 	page, err := client.GetPage(pageInfo.PageID)
 	if err != nil {

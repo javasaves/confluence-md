@@ -1,17 +1,50 @@
 package commands
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/jackchuka/confluence-md/internal/confluence"
 	"github.com/spf13/cobra"
 )
 
 type authOptions struct {
-	APIKey string
-	Email  string
+	APIKey    string
+	Email     string
+	BasicAuth bool
 }
 
 func (a *authOptions) InitFlags(cmd *cobra.Command) {
-	cmd.Flags().StringVarP(&a.APIKey, "api-token", "t", "", "Confluence API token (required)")
-	cmd.Flags().StringVarP(&a.Email, "email", "e", "", "Confluence user email (default: extracted from URL)")
+	cmd.Flags().StringVarP(&a.APIKey, "api-token", "t", "", "Bearer token or Basic password/token (required)")
+	cmd.Flags().StringVarP(&a.Email, "email", "e", "", "Username/email for Basic auth; ignored for Bearer auth")
+	cmd.Flags().BoolVar(&a.BasicAuth, "basic-auth", false, "Use HTTP Basic auth instead of the default Bearer token")
+}
+
+func (a authOptions) Validate() error {
+	if strings.TrimSpace(a.APIKey) == "" {
+		return fmt.Errorf("missing required flag: --api-token")
+	}
+
+	if a.BasicAuth && strings.TrimSpace(a.Email) == "" {
+		return fmt.Errorf("missing required flag: --email when --basic-auth is set")
+	}
+
+	return nil
+}
+
+func (a authOptions) AuthConfig() confluence.AuthConfig {
+	if a.BasicAuth {
+		return confluence.AuthConfig{
+			Mode:     confluence.AuthModeBasic,
+			Username: a.Email,
+			Secret:   a.APIKey,
+		}
+	}
+
+	return confluence.AuthConfig{
+		Mode:   confluence.AuthModeBearer,
+		Secret: a.APIKey,
+	}
 }
 
 type commonOptions struct {

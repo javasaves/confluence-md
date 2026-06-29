@@ -11,7 +11,7 @@ A CLI tool to convert Confluence pages to Markdown format with a single command.
 - Convert single Confluence pages to Markdown
 - Convert entire page trees with hierarchical structure
 - Download and embed images from Confluence pages
-- Support for Confluence Cloud with API authentication
+- Support for Confluence Cloud and self-hosted Confluence API authentication
 - Enhanced support for Confluence-specific elements (user references, status badges, time elements)
 - Clean, readable Markdown output
 - Cross-platform support (Linux, macOS, Windows)
@@ -38,21 +38,35 @@ go install github.com/jackchuka/confluence-md/cmd/confluence-md@latest
 
 ### Authentication
 
-You'll need:
+`confluence-md` uses **Bearer auth by default**.
 
-- Your Confluence email address
-- A Confluence API token ([create one here](https://id.atlassian.com/manage-profile/security/api-tokens))
+For Bearer auth (common for self-hosted Confluence with Personal Access Tokens), you'll need:
+
+- A bearer token / PAT
+
+For Basic auth (for example Confluence Cloud with Atlassian email + API token), you'll need:
+
+- A username or email address
+- A password, API token, or other secret expected by your Confluence instance
 
 ### Convert a Single Page
 
 ```bash
-confluence-md page <page-url> --email your-email@example.com --api-token your-api-token
+confluence-md page <page-url> --api-token your-bearer-token
 ```
 
 Example:
 
 ```bash
+confluence-md page https://confluence.example.com/spaces/SPACE/pages/12345/Title \
+  --api-token your-bearer-token
+```
+
+Confluence Cloud / Basic auth example:
+
+```bash
 confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title \
+  --basic-auth \
   --email john.doe@company.com \
   --api-token your-api-token-here
 ```
@@ -62,7 +76,7 @@ confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/T
 Convert an entire page hierarchy:
 
 ```bash
-confluence-md tree <page-url> --email your-email@example.com --api-token your-api-token
+confluence-md tree <page-url> --api-token your-bearer-token
 ```
 
 ### Convert HTML Files
@@ -82,8 +96,9 @@ confluence-md html page.html
 
 ### Common Options
 
-- `--email, -e`: Your Confluence email address (**required**)
-- `--api-token, -t`: Your Confluence API token (**required**)
+- `--api-token, -t`: Bearer token or Basic password/token (**required**)
+- `--email, -e`: Username/email for Basic auth
+- `--basic-auth`: Use HTTP Basic auth instead of the default Bearer auth
 - `--output, -o`: Output directory (default: current directory)
 - `--output-name-template`: Go template for the markdown filename (see below)
 - `--download-images`: Download images from Confluence (default: true)
@@ -93,21 +108,28 @@ confluence-md html page.html
 ### Examples
 
 ```bash
-# Convert to a specific directory
-confluence-md page <page-url> --email user@example.com --api-token token --output ./docs
+# Convert to a specific directory using Bearer auth
+confluence-md page <page-url> --api-token token --output ./docs
 
 # Prefix filenames with the last updated date (YYYY-MM-DD-title.md)
 confluence-md page <page-url> \
-  --email user@example.com \
   --api-token token \
   --output-name-template "{{ .Page.UpdatedAt.Format \"2006-01-02\" }}-{{ .SlugTitle }}"
 
+# Convert using Basic auth (for example Confluence Cloud)
+confluence-md page <page-url> \
+  --basic-auth \
+  --email user@example.com \
+  --api-token token
+
 # Convert without downloading images
-confluence-md page <page-url> --email user@example.com --api-token token --download-images=false
+confluence-md page <page-url> --api-token token --download-images=false
 
 # Convert entire page tree
-confluence-md tree <page-url> --email user@example.com --api-token token --output ./wiki
+confluence-md tree <page-url> --api-token token --output ./wiki
 ```
+
+Page URLs with no context path (for example `https://wiki.company.local/spaces/...`), with `/wiki`, and with other context paths such as `/confluence` are supported.
 
 ### Output name templates
 

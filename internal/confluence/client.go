@@ -22,21 +22,40 @@ type Client interface {
 	GetUser(accountID string) (*model.ConfluenceUser, error)
 }
 
+type AuthMode string
+
+const (
+	AuthModeBearer AuthMode = "bearer"
+	AuthModeBasic  AuthMode = "basic"
+)
+
+type AuthConfig struct {
+	Mode     AuthMode
+	Username string
+	Secret   string
+}
+
 // client represents a Confluence API client
 type client struct {
-	baseURL    string
-	email      string
-	apiToken   string
+	originURL  string
+	basePath   string
+	auth       AuthConfig
 	httpClient *http.Client
 	userAgent  string
 }
 
 // NewClient creates a new Confluence API client
-func NewClient(baseURL, email, apiToken string) Client {
+func NewClient(baseURL string, auth AuthConfig) Client {
+	if auth.Mode != AuthModeBasic {
+		auth.Mode = AuthModeBearer
+	}
+
+	originURL, basePath := splitBaseURL(baseURL)
+
 	return &client{
-		baseURL:  strings.TrimSuffix(baseURL, "/"),
-		email:    email,
-		apiToken: apiToken,
+		originURL: originURL,
+		basePath:  basePath,
+		auth:      auth,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -44,17 +63,36 @@ func NewClient(baseURL, email, apiToken string) Client {
 	}
 }
 
+func splitBaseURL(baseURL string) (string, string) {
+	trimmed := strings.TrimSuffix(baseURL, "/")
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return trimmed, ""
+	}
+
+	basePath := strings.TrimSuffix(parsed.Path, "/")
+	if basePath == "/" {
+		basePath = ""
+	}
+
+	return fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host), basePath
+}
+
+func (c *client) apiURL(path string) string {
+	return c.originURL + c.basePath + path
+}
+
 // GetPage retrieves a Confluence page by ID
 func (c *client) GetPage(pageID string) (*model.ConfluencePage, error) {
 	// Build URL with expansions to get all needed data
-	endpoint := fmt.Sprintf("/wiki/rest/api/content/%s", pageID)
+	endpoint := fmt.Sprintf("/rest/api/content/%s", pageID)
 	params := url.Values{
 		"expand": []string{
 			"body.storage,metadata.labels,version,space,history,children.attachment",
 		},
 	}
 
-	fullURL := c.baseURL + endpoint + "?" + params.Encode()
+	fullURL := c.apiURL(endpoint) + "?" + params.Encode()
 
 	resp, err := c.makeRequest("GET", fullURL, nil)
 	if err != nil {
@@ -83,7 +121,7 @@ const defaultChildPageLimit = 100
 
 // GetChildPages retrieves all child pages for a given page ID
 func (c *client) GetChildPages(pageID string) ([]*model.ConfluencePage, error) {
-	endpoint := fmt.Sprintf("/wiki/rest/api/content/%s/child/page", pageID)
+	endpoint := fmt.Sprintf("/rest/api/content/%s/child/page", pageID)
 	params := url.Values{
 		"expand": []string{"body.storage,metadata.labels,version,space,history"},
 		"limit":  []string{strconv.Itoa(defaultChildPageLimit)},
@@ -94,7 +132,7 @@ func (c *client) GetChildPages(pageID string) ([]*model.ConfluencePage, error) {
 
 	for {
 		params.Set("start", strconv.Itoa(start))
-		fullURL := c.baseURL + endpoint + "?" + params.Encode()
+		fullURL := c.apiURL(endpoint) + "?" + params.Encode()
 
 		resp, err := c.makeRequest("GET", fullURL, nil)
 		if err != nil {
@@ -139,6 +177,15 @@ func (c *client) GetChildPages(pageID string) ([]*model.ConfluencePage, error) {
 	return childPages, nil
 }
 
+func (c *client) applyAuth(req *http.Request) {
+	if c.auth.Mode == AuthModeBasic {
+		req.SetBasicAuth(c.auth.Username, c.auth.Secret)
+		return
+	}
+
+	req.Header.Set("Authorization", "Bearer "+c.auth.Secret)
+}
+
 // makeRequest makes an HTTP request with authentication
 func (c *client) makeRequest(method, url string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, body)
@@ -147,7 +194,7 @@ func (c *client) makeRequest(method, url string, body io.Reader) (*http.Response
 	}
 
 	// Set authentication
-	req.SetBasicAuth(c.email, c.apiToken)
+	c.applyAuth(req)
 
 	// Set headers
 	req.Header.Set("Accept", "application/json")
@@ -177,7 +224,7 @@ func (c *client) DownloadAttachmentContent(attachment *model.ConfluenceAttachmen
 
 	urls := []string{downloadURL}
 	// Some Confluence Cloud sites reject API-token auth on the legacy
-	// /wiki/download/ media path (responding 401 with www-authenticate: OAuth).
+	// /download/ media path (responding 401 with www-authenticate: OAuth).
 	// The v1 REST attachment endpoint honors token auth, so try it as a fallback.
 	if fallbackURL, ok := c.attachmentRESTDownloadURL(attachment); ok {
 		urls = append(urls, fallbackURL)
@@ -220,7 +267,7 @@ func (c *client) fetchBinary(downloadURL string) (*http.Response, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.SetBasicAuth(c.email, c.apiToken)
+	c.applyAuth(req)
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("User-Agent", c.userAgent)
 
@@ -228,7 +275,7 @@ func (c *client) fetchBinary(downloadURL string) (*http.Response, error) {
 }
 
 // attachmentRESTDownloadURL builds the v1 REST download URL for an attachment,
-// which accepts API-token Basic auth where the legacy /wiki/download/ path may not.
+// which accepts token auth where the legacy download path may not.
 func (c *client) attachmentRESTDownloadURL(attachment *model.ConfluenceAttachment) (string, bool) {
 	if attachment.ID == "" {
 		return "", false
@@ -239,8 +286,8 @@ func (c *client) attachmentRESTDownloadURL(attachment *model.ConfluenceAttachmen
 		return "", false
 	}
 
-	return fmt.Sprintf("%s/wiki/rest/api/content/%s/child/attachment/%s/download",
-		c.baseURL, pageID, attachment.ID), true
+	return c.apiURL(fmt.Sprintf("/rest/api/content/%s/child/attachment/%s/download",
+		pageID, attachment.ID)), true
 }
 
 // pageIDFromDownloadLink extracts the parent page ID from a download link of the
@@ -268,19 +315,15 @@ func (c *client) normalizeDownloadLink(link string) (string, error) {
 		link = "/" + link
 	}
 
-	if strings.HasPrefix(link, "/download/") {
-		link = "/wiki" + link
-	}
-
-	if strings.HasPrefix(link, "download/") {
-		link = "/wiki/" + link
+	if c.basePath != "" && strings.HasPrefix(link, "/download/") {
+		link = c.basePath + link
 	}
 
 	if strings.Contains(link, " ") {
 		link = strings.ReplaceAll(link, " ", "%20")
 	}
 
-	full := c.baseURL + link
+	full := c.originURL + link
 	parsed, err := url.Parse(full)
 	if err != nil {
 		return "", fmt.Errorf("invalid attachment url %s: %w", full, err)
@@ -290,8 +333,8 @@ func (c *client) normalizeDownloadLink(link string) (string, error) {
 
 // GetUser retrieves user information by account ID
 func (c *client) GetUser(accountID string) (*model.ConfluenceUser, error) {
-	endpoint := fmt.Sprintf("/wiki/rest/api/user?accountId=%s", url.QueryEscape(accountID))
-	fullURL := c.baseURL + endpoint
+	endpoint := fmt.Sprintf("/rest/api/user?accountId=%s", url.QueryEscape(accountID))
+	fullURL := c.apiURL(endpoint)
 
 	resp, err := c.makeRequest("GET", fullURL, nil)
 	if err != nil {
