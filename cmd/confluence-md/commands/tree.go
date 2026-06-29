@@ -40,11 +40,17 @@ This command fetches a page and all its descendants up to a specified depth,
 converting them to Markdown while preserving the hierarchy structure.
 
 Examples:
-  # Convert using Bearer auth (default)
+  # Convert using manual Bearer auth (default)
   confluence-md tree https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token
 
-  # Convert using Basic auth
+  # Convert using manual Basic auth
   confluence-md tree https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --basic-auth --email john.doe@company.com --api-token your-api-token
+
+  # Convert using a Bearer token stored in the OS credential store
+  confluence-md tree https://confluence.example.com/spaces/SPACE/pages/12345/Title --bearer-auth-store
+
+  # Convert using a Basic auth secret stored in the OS credential store
+  confluence-md tree https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --basic-auth-store --email john.doe@company.com
 
   confluence-md tree https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token --depth 2
 
@@ -94,7 +100,12 @@ func runTreeCommand(_ *cobra.Command, args []string) error {
 	}
 	treeOpts.OutputNamer = namer
 
-	client := confluence.NewClient(pageInfo.BaseURL, treeOpts.authOptions.AuthConfig())
+	authConfig, err := treeOpts.authOptions.Resolve(pageInfo.BaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid authentication options: %w", err)
+	}
+
+	client := confluence.NewClient(pageInfo.BaseURL, authConfig)
 
 	if treeOpts.DryRun {
 		fmt.Println("🔍 Dry run mode - analyzing page tree...")

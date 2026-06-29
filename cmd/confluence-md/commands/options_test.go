@@ -20,15 +20,33 @@ func TestAuthOptionsValidateBasicRequiresUsername(t *testing.T) {
 		BasicAuth: true,
 	}
 
-	if err := opts.Validate(); err == nil {
+	err := opts.Validate()
+	if err == nil {
 		t.Fatal("expected basic auth without username/email to fail validation")
+	}
+
+	if got, want := err.Error(), "missing required flag: --email when --basic-auth is set"; got != want {
+		t.Fatalf("unexpected error %q, want %q", got, want)
+	}
+}
+
+func TestAuthOptionsValidateKeepsLegacyTokenFirstError(t *testing.T) {
+	opts := authOptions{BasicAuth: true}
+
+	err := opts.Validate()
+	if err == nil {
+		t.Fatal("expected missing token to fail validation")
+	}
+
+	if got, want := err.Error(), "missing required flag: --api-token"; got != want {
+		t.Fatalf("unexpected error %q, want %q", got, want)
 	}
 }
 
 func TestAuthOptionsAuthConfigUsesBasicMode(t *testing.T) {
 	opts := authOptions{
 		APIKey:    "secret",
-		Email:     "alice",
+		Email:     " alice ",
 		BasicAuth: true,
 	}
 

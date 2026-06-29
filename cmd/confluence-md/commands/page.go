@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/jackchuka/confluence-md/internal/confluence"
+	confluenceModel "github.com/jackchuka/confluence-md/internal/confluence/model"
 	"github.com/jackchuka/confluence-md/internal/converter"
 	"github.com/spf13/cobra"
 )
@@ -15,15 +16,22 @@ var pageCmd = &cobra.Command{
 	Short: "Convert a single Confluence page to Markdown",
 	Long: `Convert a single Confluence page to Markdown format.
 
-Provide the page URL and your authentication credentials to download and convert the page.
+Provide the page URL and either manual authentication flags or OS credential store flags
+to download and convert the page.
 The converted content is saved to an output directory with images in an assets folder.
 
 Examples:
-  # Convert using Bearer auth (default)
+  # Convert using manual Bearer auth (default)
   confluence-md page https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token
 
-  # Convert using Basic auth
+  # Convert using manual Basic auth
   confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --basic-auth --email john.doe@company.com --api-token your-api-token
+
+  # Convert using a Bearer token stored in the OS credential store
+  confluence-md page https://confluence.example.com/spaces/SPACE/pages/12345/Title --bearer-auth-store
+
+  # Convert using a Basic auth secret stored in the OS credential store
+  confluence-md page https://example.atlassian.net/wiki/spaces/SPACE/pages/12345/Title --basic-auth-store --email john.doe@company.com
 
   # Convert to custom directory
   confluence-md page https://confluence.example.com/spaces/SPACE/pages/12345/Title --api-token your-bearer-token --output ./docs
@@ -58,15 +66,30 @@ func runPage(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("missing required argument: page URL")
 	}
 
+	pageURL := args[0]
+
+	var (
+		pageInfo confluenceModel.PageURLInfo
+		err      error
+	)
+
+	if pageOpts.authOptions.usesSecretStore() {
+		pageInfo, err = urlToPageInfo(pageURL)
+		if err != nil {
+			return fmt.Errorf("invalid Confluence URL: %w", err)
+		}
+	}
+
 	if err := pageOpts.authOptions.Validate(); err != nil {
 		return fmt.Errorf("invalid authentication options: %w", err)
 	}
-	pageURL := args[0]
 
-	// Extract base URL from page URL
-	pageInfo, err := urlToPageInfo(pageURL)
-	if err != nil {
-		return fmt.Errorf("invalid Confluence URL: %w", err)
+	if pageInfo.BaseURL == "" {
+		// Manual auth keeps the legacy order: validate flags before parsing the page URL.
+		pageInfo, err = urlToPageInfo(pageURL)
+		if err != nil {
+			return fmt.Errorf("invalid Confluence URL: %w", err)
+		}
 	}
 
 	namer, err := buildOutputNamer(pageOpts.OutputNameTemplate)
@@ -76,7 +99,12 @@ func runPage(_ *cobra.Command, args []string) error {
 	pageOpts.OutputNamer = namer
 
 	// Create Confluence client
-	client := confluence.NewClient(pageInfo.BaseURL, pageOpts.authOptions.AuthConfig())
+	authConfig, err := pageOpts.authOptions.Resolve(pageInfo.BaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid authentication options: %w", err)
+	}
+
+	client := confluence.NewClient(pageInfo.BaseURL, authConfig)
 
 	page, err := client.GetPage(pageInfo.PageID)
 	if err != nil {

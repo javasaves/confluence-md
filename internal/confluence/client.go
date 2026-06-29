@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackchuka/confluence-md/internal/confluence/model"
 	"github.com/jackchuka/confluence-md/internal/version"
+	"golang.org/x/net/http/httpguts"
 )
 
 type Client interface {
@@ -177,13 +178,20 @@ func (c *client) GetChildPages(pageID string) ([]*model.ConfluencePage, error) {
 	return childPages, nil
 }
 
-func (c *client) applyAuth(req *http.Request) {
+func (c *client) applyAuth(req *http.Request) error {
 	if c.auth.Mode == AuthModeBasic {
 		req.SetBasicAuth(c.auth.Username, c.auth.Secret)
-		return
+		return nil
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.auth.Secret)
+	secret := strings.TrimSpace(c.auth.Secret)
+	headerValue := "Bearer " + secret
+	if !httpguts.ValidHeaderFieldValue(headerValue) {
+		return fmt.Errorf("invalid Bearer token for Authorization header: the token contains a newline or other control character; re-save it without extra whitespace in --api-token or the OS credential store")
+	}
+
+	req.Header.Set("Authorization", headerValue)
+	return nil
 }
 
 // makeRequest makes an HTTP request with authentication
@@ -194,7 +202,9 @@ func (c *client) makeRequest(method, url string, body io.Reader) (*http.Response
 	}
 
 	// Set authentication
-	c.applyAuth(req)
+	if err := c.applyAuth(req); err != nil {
+		return nil, err
+	}
 
 	// Set headers
 	req.Header.Set("Accept", "application/json")
@@ -267,7 +277,9 @@ func (c *client) fetchBinary(downloadURL string) (*http.Response, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	c.applyAuth(req)
+	if err := c.applyAuth(req); err != nil {
+		return nil, err
+	}
 	req.Header.Set("Accept", "*/*")
 	req.Header.Set("User-Agent", c.userAgent)
 
