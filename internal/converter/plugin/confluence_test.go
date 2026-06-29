@@ -7,8 +7,8 @@ import (
 	htmldom "golang.org/x/net/html"
 
 	convpkg "github.com/JohannesKaufmann/html-to-markdown/v2/converter"
-	"github.com/jackchuka/confluence-md/internal/confluence/model"
-	mock_attachments "github.com/jackchuka/confluence-md/internal/converter/plugin/attachments/mock"
+	"github.com/javasaves/confluence-md/internal/confluence/model"
+	mock_attachments "github.com/javasaves/confluence-md/internal/converter/plugin/attachments/mock"
 	gomock "go.uber.org/mock/gomock"
 )
 

@@ -3,7 +3,7 @@ package commands
 import (
 	"testing"
 
-	"github.com/jackchuka/confluence-md/internal/confluence"
+	"github.com/javasaves/confluence-md/internal/confluence"
 )
 
 func TestAuthOptionsValidateBearerRequiresOnlyToken(t *testing.T) {

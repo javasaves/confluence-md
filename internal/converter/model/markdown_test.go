@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackchuka/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/confluence/model"
 )
 
 func TestMarkdownDocumentWithFrontmatter(t *testing.T) {

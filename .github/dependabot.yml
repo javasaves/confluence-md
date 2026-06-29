@@ -14,7 +14,7 @@ updates:
       prefix: "deps"
       include: "scope"
     reviewers:
-      - "jackchuka"
+      - "javasaves"
     labels:
       - "dependencies"
       - "go"
@@ -31,9 +31,9 @@ updates:
       prefix: "ci"
       include: "scope"
     reviewers:
-      - "jackchuka"
+      - "javasaves"
     assignees:
-      - "jackchuka"
+      - "javasaves"
     labels:
       - "dependencies"
       - "github-actions"

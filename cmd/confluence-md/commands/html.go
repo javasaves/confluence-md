@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jackchuka/confluence-md/internal/converter"
+	"github.com/javasaves/confluence-md/internal/converter"
 	"github.com/spf13/cobra"
 )
 

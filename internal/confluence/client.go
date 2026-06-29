@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackchuka/confluence-md/internal/confluence/model"
-	"github.com/jackchuka/confluence-md/internal/version"
+	"github.com/javasaves/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/version"
 	"golang.org/x/net/http/httpguts"
 )
 

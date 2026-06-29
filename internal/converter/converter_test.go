@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	confModel "github.com/jackchuka/confluence-md/internal/confluence/model"
-	convModel "github.com/jackchuka/confluence-md/internal/converter/model"
-	mock_attachments "github.com/jackchuka/confluence-md/internal/converter/plugin/attachments/mock"
+	confModel "github.com/javasaves/confluence-md/internal/confluence/model"
+	convModel "github.com/javasaves/confluence-md/internal/converter/model"
+	mock_attachments "github.com/javasaves/confluence-md/internal/converter/plugin/attachments/mock"
 	gomock "go.uber.org/mock/gomock"
 )
 

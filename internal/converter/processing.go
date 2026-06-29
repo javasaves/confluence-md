@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jackchuka/confluence-md/internal/converter/model"
-	"github.com/jackchuka/confluence-md/internal/converter/plugin"
+	"github.com/javasaves/confluence-md/internal/converter/model"
+	"github.com/javasaves/confluence-md/internal/converter/plugin"
 	htmlnode "golang.org/x/net/html"
 )
 

@@ -19,9 +19,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/jackchuka/confluence-md/internal/version.Version={{.Version}}
-      - -X github.com/jackchuka/confluence-md/internal/version.Commit={{.Commit}}
-      - -X github.com/jackchuka/confluence-md/internal/version.Date={{.Date}}
+      - -X github.com/javasaves/confluence-md/internal/version.Version={{.Version}}
+      - -X github.com/javasaves/confluence-md/internal/version.Commit={{.Commit}}
+      - -X github.com/javasaves/confluence-md/internal/version.Date={{.Date}}
 
 changelog:
   sort: asc

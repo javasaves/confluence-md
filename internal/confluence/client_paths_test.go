@@ -3,7 +3,7 @@ package confluence
 import (
 	"testing"
 
-	"github.com/jackchuka/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/confluence/model"
 )
 
 func TestSplitBaseURL(t *testing.T) {

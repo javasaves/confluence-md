@@ -10,9 +10,9 @@ import (
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/jackchuka/confluence-md/internal/confluence"
-	"github.com/jackchuka/confluence-md/internal/confluence/model"
-	"github.com/jackchuka/confluence-md/internal/converter/plugin/attachments"
+	"github.com/javasaves/confluence-md/internal/confluence"
+	"github.com/javasaves/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/converter/plugin/attachments"
 	"golang.org/x/net/html"
 )
 

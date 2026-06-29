@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jackchuka/confluence-md/internal/converter/model"
+	"github.com/javasaves/confluence-md/internal/converter/model"
 )
 
 // SaveMarkdownDocument writes the markdown document to disk with optional frontmatter.

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	confluenceModel "github.com/jackchuka/confluence-md/internal/confluence/model"
+	confluenceModel "github.com/javasaves/confluence-md/internal/confluence/model"
 )
 
 func TestGenerateFileName_Default(t *testing.T) {

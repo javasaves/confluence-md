@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackchuka/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/confluence/model"
 )
 
 // MarkdownDocument represents the output document structure

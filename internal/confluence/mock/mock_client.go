@@ -12,7 +12,7 @@ package mock_confluence
 import (
 	reflect "reflect"
 
-	model "github.com/jackchuka/confluence-md/internal/confluence/model"
+	model "github.com/javasaves/confluence-md/internal/confluence/model"
 	gomock "go.uber.org/mock/gomock"
 )
 

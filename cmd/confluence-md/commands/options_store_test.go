@@ -7,8 +7,8 @@ import (
 	"testing"
 	"unicode/utf16"
 
-	"github.com/jackchuka/confluence-md/internal/confluence"
-	"github.com/jackchuka/confluence-md/internal/credentials"
+	"github.com/javasaves/confluence-md/internal/confluence"
+	"github.com/javasaves/confluence-md/internal/credentials"
 	"github.com/zalando/go-keyring"
 )
 

@@ -1,7 +1,7 @@
 # confluence-md
 
-[![Test](https://github.com/jackchuka/confluence-md/workflows/Test/badge.svg)](https://github.com/jackchuka/confluence-md/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jackchuka/confluence-md)](https://goreportcard.com/report/github.com/jackchuka/confluence-md)
+[![Test](https://github.com/javasaves/confluence-md/workflows/Test/badge.svg)](https://github.com/javasaves/confluence-md/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/javasaves/confluence-md)](https://goreportcard.com/report/github.com/javasaves/confluence-md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A CLI tool to convert Confluence pages to Markdown format with a single command. Supports images, tables, lists, and various macros (**yes, even mermaid diagrams!**).
@@ -20,18 +20,16 @@ A CLI tool to convert Confluence pages to Markdown format with a single command.
 
 ### Homebrew
 
-```bash
-brew install jackchuka/tap/confluence-md
-```
+No Homebrew tap is currently published for `github.com/javasaves/confluence-md`. Use the pre-built binaries or `go install` instructions below instead.
 
 ### Pre-built Binaries
 
-Download the latest release for your platform from the [releases page](https://github.com/jackchuka/confluence-md/releases).
+Download the latest release for your platform from the [releases page](https://github.com/javasaves/confluence-md/releases).
 
 ### From Source
 
 ```bash
-go install github.com/jackchuka/confluence-md/cmd/confluence-md@latest
+go install github.com/javasaves/confluence-md/cmd/confluence-md@latest
 ```
 
 ## Usage
@@ -369,7 +367,7 @@ The tool creates:
 ### Building
 
 ```bash
-git clone https://github.com/jackchuka/confluence-md.git
+git clone https://github.com/javasaves/confluence-md.git
 cd confluence-md
 go build -o confluence-md cmd/confluence-md/main.go
 ```
@@ -401,4 +399,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-For issues and feature requests, please use the [GitHub issue tracker](https://github.com/jackchuka/confluence-md/issues).
+For issues and feature requests, please use the [GitHub issue tracker](https://github.com/javasaves/confluence-md/issues).

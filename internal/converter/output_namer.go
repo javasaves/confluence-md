@@ -7,7 +7,7 @@ import (
 	"text/template"
 
 	"github.com/gosimple/slug"
-	confluenceModel "github.com/jackchuka/confluence-md/internal/confluence/model"
+	confluenceModel "github.com/javasaves/confluence-md/internal/confluence/model"
 )
 
 // OutputNamer generates a filename for a converted Confluence page.

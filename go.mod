@@ -1,4 +1,4 @@
-module github.com/jackchuka/confluence-md
+module github.com/javasaves/confluence-md
 
 go 1.26.1
 

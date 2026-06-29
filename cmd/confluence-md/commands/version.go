@@ -3,7 +3,7 @@ package commands
 import (
 	"fmt"
 
-	"github.com/jackchuka/confluence-md/internal/version"
+	"github.com/javasaves/confluence-md/internal/version"
 	"github.com/spf13/cobra"
 )
 

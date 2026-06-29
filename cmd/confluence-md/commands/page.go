@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/jackchuka/confluence-md/internal/confluence"
-	confluenceModel "github.com/jackchuka/confluence-md/internal/confluence/model"
-	"github.com/jackchuka/confluence-md/internal/converter"
+	"github.com/javasaves/confluence-md/internal/confluence"
+	confluenceModel "github.com/javasaves/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/converter"
 	"github.com/spf13/cobra"
 )
 

@@ -8,11 +8,11 @@ import (
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
-	"github.com/jackchuka/confluence-md/internal/confluence"
-	confluenceModel "github.com/jackchuka/confluence-md/internal/confluence/model"
-	"github.com/jackchuka/confluence-md/internal/converter/model"
-	"github.com/jackchuka/confluence-md/internal/converter/plugin"
-	"github.com/jackchuka/confluence-md/internal/converter/plugin/attachments"
+	"github.com/javasaves/confluence-md/internal/confluence"
+	confluenceModel "github.com/javasaves/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/converter/model"
+	"github.com/javasaves/confluence-md/internal/converter/plugin"
+	"github.com/javasaves/confluence-md/internal/converter/plugin/attachments"
 )
 
 const maxImageSizeBytes = 10 * 1024 * 1024

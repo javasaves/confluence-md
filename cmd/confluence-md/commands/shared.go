@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/gosimple/slug"
-	"github.com/jackchuka/confluence-md/internal/confluence"
-	confluenceModel "github.com/jackchuka/confluence-md/internal/confluence/model"
-	"github.com/jackchuka/confluence-md/internal/converter"
+	"github.com/javasaves/confluence-md/internal/confluence"
+	confluenceModel "github.com/javasaves/confluence-md/internal/confluence/model"
+	"github.com/javasaves/confluence-md/internal/converter"
 )
 
 // sanitizeFileName uses the mature gosimple/slug library for robust filename sanitization
