@@ -484,13 +484,8 @@ func (p *ConfluencePlugin) handleTable(ctx converter.Context, w converter.Writer
 				} else {
 					// For simple cells, convert to markdown
 					var buf strings.Builder
-					// Find first non-whitespace child
-					firstChild := cell.FirstChild
-					for firstChild != nil && firstChild.Type == html.TextNode && strings.TrimSpace(firstChild.Data) == "" {
-						firstChild = firstChild.NextSibling
-					}
-					if firstChild != nil {
-						ctx.RenderNodes(ctx, &buf, firstChild)
+					for child := cell.FirstChild; child != nil; child = child.NextSibling {
+						ctx.RenderNodes(ctx, &buf, child)
 					}
 					cellContent = strings.TrimSpace(buf.String())
 				}
