@@ -436,27 +436,12 @@ func (p *ConfluencePlugin) flattenTaskList(ctx converter.Context, w *strings.Bui
 	}
 }
 
-// handleTable converts HTML tables to markdown tables, preserving HTML content for complex cells
-func (p *ConfluencePlugin) handleTable(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
-	// Extract table data
-	var rows [][]string
-	var isHeaderRow []bool
-
-	// Find tbody
-	var tbody *html.Node
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == html.ElementNode && c.Data == "tbody" {
-			tbody = c
-			break
-		}
+func (p *ConfluencePlugin) appendTableSectionRows(ctx converter.Context, section *html.Node, forceHeader bool, rows *[][]string, isHeaderRow *[]bool) {
+	if section == nil {
+		return
 	}
 
-	if tbody == nil {
-		return converter.RenderTryNext // Let default handler try
-	}
-
-	// Process rows
-	for tr := tbody.FirstChild; tr != nil; tr = tr.NextSibling {
+	for tr := section.FirstChild; tr != nil; tr = tr.NextSibling {
 		if tr.Type != html.ElementNode || tr.Data != "tr" {
 			continue
 		}
@@ -479,10 +464,8 @@ func (p *ConfluencePlugin) handleTable(ctx converter.Context, w converter.Writer
 				var cellContent string
 
 				if p.cellHasComplexContent(cell) {
-					// For complex cells, preserve the HTML content
 					cellContent = p.getCellHTMLContent(ctx, cell)
 				} else {
-					// For simple cells, convert to markdown
 					var buf strings.Builder
 					for child := cell.FirstChild; child != nil; child = child.NextSibling {
 						ctx.RenderNodes(ctx, &buf, child)
@@ -490,7 +473,6 @@ func (p *ConfluencePlugin) handleTable(ctx converter.Context, w converter.Writer
 					cellContent = strings.TrimSpace(buf.String())
 				}
 
-				// Handle empty cells
 				if cellContent == "" || cellContent == "&nbsp;" {
 					cellContent = " "
 				}
@@ -500,11 +482,40 @@ func (p *ConfluencePlugin) handleTable(ctx converter.Context, w converter.Writer
 		}
 
 		if len(row) > 0 {
-			rows = append(rows, row)
-			// Only treat as header row if ALL cells are <th> (no <td>)
-			isHeaderRow = append(isHeaderRow, hasOnlyHeaders && !hasSomeTd)
+			*rows = append(*rows, row)
+			if forceHeader {
+				*isHeaderRow = append(*isHeaderRow, true)
+			} else {
+				*isHeaderRow = append(*isHeaderRow, hasOnlyHeaders && !hasSomeTd)
+			}
 		}
 	}
+}
+
+// handleTable converts HTML tables to markdown tables, preserving HTML content for complex cells
+func (p *ConfluencePlugin) handleTable(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	var rows [][]string
+	var isHeaderRow []bool
+
+	var thead, tbody *html.Node
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		switch c.Data {
+		case "thead":
+			thead = c
+		case "tbody":
+			tbody = c
+		}
+	}
+
+	if thead == nil && tbody == nil {
+		return converter.RenderTryNext // Let default handler try
+	}
+
+	p.appendTableSectionRows(ctx, thead, true, &rows, &isHeaderRow)
+	p.appendTableSectionRows(ctx, tbody, false, &rows, &isHeaderRow)
 
 	if len(rows) == 0 {
 		return converter.RenderTryNext
