@@ -1287,33 +1287,37 @@ func (p *ConfluencePlugin) handleLink(ctx converter.Context, w converter.Writer,
 	return converter.RenderTryNext
 }
 
-// handleInlineComment preserves inline comment markers
+// handleInlineComment renders commented inline content and optionally preserves the comment ref.
 func (p *ConfluencePlugin) handleInlineComment(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
-	// Extract the text content
-	var text string
-	if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
-		text = n.FirstChild.Data
-	}
-
-	// Extract comment reference ID
-	ref := ""
-	for _, attr := range n.Attr {
-		if attr.Key == "ac:ref" {
-			ref = attr.Val
-			break
+	if ctx != nil {
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			ctx.RenderNodes(ctx, w, child)
+		}
+	} else {
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			if child.Type == html.TextNode {
+				_, _ = w.WriteString(child.Data)
+			}
 		}
 	}
 
-	// Write the text as-is, optionally add comment marker
-	if text != "" {
-		_, _ = w.WriteString(text)
-	}
-
-	if ref != "" {
+	if ref := inlineCommentRef(n); ref != "" {
 		_, _ = fmt.Fprintf(w, "<!-- comment-ref: %s -->", ref)
 	}
 
 	return converter.RenderSuccess
+}
+
+func inlineCommentRef(n *html.Node) string {
+	if n == nil {
+		return ""
+	}
+	for _, attr := range n.Attr {
+		if attr.Key == "ac:ref" {
+			return attr.Val
+		}
+	}
+	return ""
 }
 
 // handlePlaceholder converts placeholder text to comments

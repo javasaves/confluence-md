@@ -206,6 +206,30 @@ func TestFixMarkdownLinksPrefixesDisplayPath(t *testing.T) {
 	}
 }
 
+func TestConverterInlineCommentMarkerPreservesPageLink(t *testing.T) {
+	conv := NewConverter(nil)
+	conv.confluenceBaseURL = "https://wiki.example.com"
+	conv.plugin.SetBaseURL("https://wiki.example.com")
+	conv.plugin.SetCurrentPage(&confModel.ConfluencePage{SpaceKey: "TEAM"})
+
+	title := "Документация по работе с ошибками в .Net сервисах"
+	html := `<p>Метод возвращает стандартизированные ошибки ( <ac:inline-comment-marker ac:ref="fda0a786-ee0e-439b-b5a7-07c57e03e287"><ac:link><ri:page ri:content-title="` + title + `" /></ac:link></ac:inline-comment-marker> )</p>`
+
+	got, err := conv.convertHtml(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(got, title) {
+		t.Fatalf("expected link text %q in %q", title, got)
+	}
+	if !strings.Contains(got, "https://wiki.example.com/display/TEAM/") {
+		t.Fatalf("expected display page link in %q", got)
+	}
+	if !strings.Contains(got, "](") {
+		t.Fatalf("expected markdown link, got %q", got)
+	}
+}
+
 func TestConverterConvertHTMLConfluencePageLinkWithPlainTextBody(t *testing.T) {
 	conv := NewConverter(nil)
 

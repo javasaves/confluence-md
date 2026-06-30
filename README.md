@@ -334,7 +334,7 @@ If the rendered filename omits an extension, `.md` is appended automatically.
 | **Page Links**      | `ac:link` + `ri:page` / `ri:content-entity`, or rendered `<a href>` | Hrefs are preserved as in Confluence (`/pages/viewpage.action`, `/spaces/…/pages/…`, `/display/…`); with `page`/`tree` the site base URL is prepended |
 | **URL Links**       | `ac:link` + `ri:url`       | Converted to `[text](url)` using the `ri:value` attribute               |
 | **Time Elements**   | `<time>`                   | Datetime attribute extracted and displayed                              |
-| **Inline Comments** | `ac:inline-comment-marker` | Text preserved with comment reference                                   |
+| **Inline Comments** | `ac:inline-comment-marker` | Inner content rendered (links, formatting); optional `<!-- comment-ref: … -->` after |
 | **Placeholders**    | `ac:placeholder`           | Converted to HTML comments                                              |
 
 ### Macros (`ac:structured-macro`)
