@@ -55,6 +55,21 @@ func (mr *MockClientMockRecorder) DownloadAttachmentContent(attachment any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadAttachmentContent", reflect.TypeOf((*MockClient)(nil).DownloadAttachmentContent), attachment)
 }
 
+// FindPageIDByTitle mocks base method.
+func (m *MockClient) FindPageIDByTitle(spaceKey, title string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindPageIDByTitle", spaceKey, title)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindPageIDByTitle indicates an expected call of FindPageIDByTitle.
+func (mr *MockClientMockRecorder) FindPageIDByTitle(spaceKey, title any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindPageIDByTitle", reflect.TypeOf((*MockClient)(nil).FindPageIDByTitle), spaceKey, title)
+}
+
 // GetChildPages mocks base method.
 func (m *MockClient) GetChildPages(pageID string) ([]*model.ConfluencePage, error) {
 	m.ctrl.T.Helper()
@@ -83,4 +98,19 @@ func (m *MockClient) GetPage(pageID string) (*model.ConfluencePage, error) {
 func (mr *MockClientMockRecorder) GetPage(pageID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPage", reflect.TypeOf((*MockClient)(nil).GetPage), pageID)
+}
+
+// GetUser mocks base method.
+func (m *MockClient) GetUser(accountID string) (*model.ConfluenceUser, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUser", accountID)
+	ret0, _ := ret[0].(*model.ConfluenceUser)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUser indicates an expected call of GetUser.
+func (mr *MockClientMockRecorder) GetUser(accountID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUser", reflect.TypeOf((*MockClient)(nil).GetUser), accountID)
 }

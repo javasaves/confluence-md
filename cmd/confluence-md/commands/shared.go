@@ -112,6 +112,66 @@ func printConversionResult(result *PageConversionResult) {
 	fmt.Println()
 }
 
+const (
+	errCouldNotExtractPageID        = "could not extract page ID from URL"
+	errCouldNotExtractPageIDOrTitle = "could not extract page ID or title from URL"
+)
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func basePathBeforeAnchor(pathParts []string, endIndex int) string {
+	for _, anchor := range []string{"spaces", "display", "pages"} {
+		for i := 0; i < endIndex; i++ {
+			if pathParts[i] == anchor {
+				if i > 0 {
+					return "/" + strings.Join(pathParts[:i], "/")
+				}
+				return ""
+			}
+		}
+	}
+	return ""
+}
+
+func extractSpaceKeyFromPath(pathParts []string, endIndex int) string {
+	for i := 0; i < endIndex; i++ {
+		if pathParts[i] == "spaces" && i+1 < endIndex {
+			return pathParts[i+1]
+		}
+	}
+	return ""
+}
+
+func decodeDisplayTitle(raw string) (string, error) {
+	decoded, err := url.PathUnescape(strings.ReplaceAll(raw, "+", " "))
+	if err != nil {
+		return "", err
+	}
+	return decoded, nil
+}
+
+func ensurePageID(client confluence.Client, info confluenceModel.PageURLInfo) (confluenceModel.PageURLInfo, error) {
+	if info.PageID != "" {
+		return info, nil
+	}
+	id, err := client.FindPageIDByTitle(info.SpaceKey, info.Title)
+	if err != nil {
+		return info, err
+	}
+	info.PageID = id
+	return info, nil
+}
+
 func urlToPageInfo(pageURL string) (confluenceModel.PageURLInfo, error) {
 	if pageURL == "" {
 		return confluenceModel.PageURLInfo{}, fmt.Errorf("URL is empty")
@@ -123,17 +183,70 @@ func urlToPageInfo(pageURL string) (confluenceModel.PageURLInfo, error) {
 	}
 
 	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	basePath := ""
-	spaceKeyIndex := -1
 	var pageID string
 	var spaceKey string
 	var title string
 
-	// Extract page ID from path
-	// Path formats:
-	//   /spaces/SPACE/pages/12345/Title
-	//   /wiki/spaces/SPACE/pages/12345/Title
-	//   /confluence/spaces/SPACE/pages/12345/Title
+	if len(pathParts) > 0 && pathParts[len(pathParts)-1] == "viewpage.action" {
+		viewpageIndex := len(pathParts) - 1
+		pageID = u.Query().Get("pageId")
+		if pageID != "" && !isAllDigits(pageID) {
+			return confluenceModel.PageURLInfo{}, fmt.Errorf(errCouldNotExtractPageID)
+		}
+		title = u.Query().Get("title")
+		spaceKey = extractSpaceKeyFromPath(pathParts, viewpageIndex)
+		if querySpaceKey := u.Query().Get("spaceKey"); querySpaceKey != "" {
+			spaceKey = querySpaceKey
+		}
+		basePath := basePathBeforeAnchor(pathParts, viewpageIndex)
+		baseURL := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, basePath)
+		if pageID == "" && title == "" {
+			return confluenceModel.PageURLInfo{}, fmt.Errorf(errCouldNotExtractPageIDOrTitle)
+		}
+		return confluenceModel.PageURLInfo{
+			BaseURL:   baseURL,
+			SourceURL: pageURL,
+			PageID:    pageID,
+			SpaceKey:  spaceKey,
+			Title:     title,
+		}, nil
+	}
+
+	for i, part := range pathParts {
+		if part == "display" && i+1 < len(pathParts) {
+			spaceKey = pathParts[i+1]
+			rawTitle := pathParts[len(pathParts)-1]
+			decoded, err := decodeDisplayTitle(rawTitle)
+			if err != nil {
+				return confluenceModel.PageURLInfo{}, fmt.Errorf("invalid URL: %w", err)
+			}
+			title = decoded
+			basePath := ""
+			if i > 0 {
+				basePath = "/" + strings.Join(pathParts[:i], "/")
+			}
+			if queryPageID := u.Query().Get("pageId"); queryPageID != "" {
+				if !isAllDigits(queryPageID) {
+					return confluenceModel.PageURLInfo{}, fmt.Errorf(errCouldNotExtractPageID)
+				}
+				pageID = queryPageID
+			}
+			baseURL := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, basePath)
+			if pageID == "" && title == "" {
+				return confluenceModel.PageURLInfo{}, fmt.Errorf(errCouldNotExtractPageIDOrTitle)
+			}
+			return confluenceModel.PageURLInfo{
+				BaseURL:   baseURL,
+				SourceURL: pageURL,
+				PageID:    pageID,
+				SpaceKey:  spaceKey,
+				Title:     title,
+			}, nil
+		}
+	}
+
+	basePath := ""
+	spaceKeyIndex := -1
 	for i, part := range pathParts {
 		if part == "spaces" && i+1 < len(pathParts) {
 			spaceKey = pathParts[i+1]
@@ -147,14 +260,21 @@ func urlToPageInfo(pageURL string) (confluenceModel.PageURLInfo, error) {
 		}
 	}
 
+	if queryPageID := u.Query().Get("pageId"); queryPageID != "" {
+		if !isAllDigits(queryPageID) {
+			return confluenceModel.PageURLInfo{}, fmt.Errorf(errCouldNotExtractPageID)
+		}
+		pageID = queryPageID
+	}
+
 	if spaceKeyIndex > 0 {
 		basePath = "/" + strings.Join(pathParts[:spaceKeyIndex], "/")
 	}
 
 	baseURL := fmt.Sprintf("%s://%s%s", u.Scheme, u.Host, basePath)
 
-	if pageID == "" {
-		return confluenceModel.PageURLInfo{}, fmt.Errorf("could not extract page ID from URL")
+	if pageID == "" || !isAllDigits(pageID) {
+		return confluenceModel.PageURLInfo{}, fmt.Errorf(errCouldNotExtractPageID)
 	}
 
 	return confluenceModel.PageURLInfo{

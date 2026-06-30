@@ -19,6 +19,7 @@ import (
 type Client interface {
 	GetPage(pageID string) (*model.ConfluencePage, error)
 	GetChildPages(pageID string) ([]*model.ConfluencePage, error)
+	FindPageIDByTitle(spaceKey, title string) (string, error)
 	DownloadAttachmentContent(attachment *model.ConfluenceAttachment) ([]byte, error)
 	GetUser(accountID string) (*model.ConfluenceUser, error)
 }
@@ -176,6 +177,49 @@ func (c *client) GetChildPages(pageID string) ([]*model.ConfluencePage, error) {
 	}
 
 	return childPages, nil
+}
+
+// FindPageIDByTitle looks up a page ID by exact title, optionally scoped to a space.
+func (c *client) FindPageIDByTitle(spaceKey, title string) (string, error) {
+	params := url.Values{
+		"type":  []string{"page"},
+		"title": []string{title},
+	}
+	if spaceKey != "" {
+		params.Set("spaceKey", spaceKey)
+	}
+
+	fullURL := c.apiURL("/rest/api/content") + "?" + params.Encode()
+
+	resp, err := c.makeRequest("GET", fullURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to find page by title %q: %w", title, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", c.handleErrorResponse(resp, fmt.Sprintf("find page by title %q", title))
+	}
+
+	var searchResult model.ConfluenceSearchResult
+	if err := json.NewDecoder(resp.Body).Decode(&searchResult); err != nil {
+		return "", fmt.Errorf("failed to decode search response: %w", err)
+	}
+
+	switch len(searchResult.Results) {
+	case 0:
+		return "", fmt.Errorf("page not found for title %q", title)
+	case 1:
+		return searchResult.Results[0].ID, nil
+	default:
+		return "", fmt.Errorf(
+			"found %d pages with title %q; specify spaceKey or use a URL with pageId",
+			len(searchResult.Results),
+			title,
+		)
+	}
 }
 
 func (c *client) applyAuth(req *http.Request) error {

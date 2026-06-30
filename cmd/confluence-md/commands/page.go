@@ -107,6 +107,11 @@ func runPage(_ *cobra.Command, args []string) error {
 
 	client := confluence.NewClient(pageInfo.BaseURL, authConfig)
 
+	pageInfo, err = ensurePageID(client, pageInfo)
+	if err != nil {
+		return fmt.Errorf("failed to resolve page ID: %w", err)
+	}
+
 	page, err := client.GetPage(pageInfo.PageID)
 	if err != nil {
 		return fmt.Errorf("failed to get page: %w", err)

@@ -292,6 +292,17 @@ confluence-md tree <page-url> --api-token token --output ./wiki
 
 Page URLs with no context path (for example `https://wiki.company.local/spaces/...`), with `/wiki`, and with other context paths such as `/confluence` are supported.
 
+Supported URL formats:
+
+| Format | Example | Notes |
+|--------|---------|-------|
+| Spaces page | `https://wiki.example.com/spaces/SPACE/pages/12345/Title` | Page ID in path; preferred for metadata |
+| Display | `https://wiki.example.com/display/SPACE/Page+Title` | Title lookup via REST (v1: single title segment only) |
+| View page (title) | `https://wiki.example.com/pages/viewpage.action?title=Page+Title` | Title lookup; without `spaceKey` a global match may pick the wrong space |
+| View page (ID) | `https://wiki.example.com/pages/viewpage.action?pageId=12345` | Direct page ID from query |
+
+For display URLs, only a single title segment is supported in v1 (`/display/SPACE/Title`, not `/display/SPACE/Parent/Child`). When a page is resolved by title rather than numeric ID in the path, frontmatter stores the canonical URL from the API (`page.GetURL`) instead of the original link.
+
 ### Output name templates
 
 The `--output-name-template` flag accepts a Go text/template string. Templates can reference:
