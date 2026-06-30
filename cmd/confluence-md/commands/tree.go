@@ -112,7 +112,7 @@ func runTreeCommand(_ *cobra.Command, args []string) error {
 		return performDryRun(client, pageInfo.PageID, &treeOpts)
 	}
 
-	return performTreeConversion(client, pageInfo.BaseURL, pageInfo.PageID, &treeOpts)
+	return performTreeConversion(client, pageInfo.BaseURL, pageInfo.PageID, pageInfo.SourceURL, &treeOpts)
 }
 
 func validateTreeOptions() error {
@@ -151,7 +151,7 @@ func performDryRun(client confluence.Client, rootPageID string, opts *TreeOption
 	return nil
 }
 
-func performTreeConversion(client confluence.Client, baseURL, rootPageID string, opts *TreeOptions) error {
+func performTreeConversion(client confluence.Client, baseURL, rootPageID, rootPageURL string, opts *TreeOptions) error {
 	// Create output directory
 	if err := os.MkdirAll(opts.OutputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
@@ -165,7 +165,7 @@ func performTreeConversion(client confluence.Client, baseURL, rootPageID string,
 
 	// Convert tree recursively using shared pipeline
 	results := &ConversionResults{}
-	err = convertPageTree(client, tree, opts.OutputDir, baseURL, opts, results)
+	err = convertPageTree(client, tree, opts.OutputDir, baseURL, rootPageID, rootPageURL, opts, results)
 
 	// Display results
 	fmt.Printf("✅ Conversion complete!\n")
@@ -324,7 +324,7 @@ func calculateTreeStats(node *PageNode) *TreeStats {
 	return stats
 }
 
-func convertPageTree(client confluence.Client, node *PageNode, outputDir string, baseURL string, opts *TreeOptions, results *ConversionResults) error {
+func convertPageTree(client confluence.Client, node *PageNode, outputDir, baseURL, rootPageID, rootPageURL string, opts *TreeOptions, results *ConversionResults) error {
 	if node == nil {
 		return nil
 	}
@@ -355,6 +355,9 @@ func convertPageTree(client confluence.Client, node *PageNode, outputDir string,
 		commonOptions: opts.commonOptions,
 		OutputNamer:   opts.OutputNamer,
 	}
+	if node.ID == rootPageID {
+		conversionOpts.SourcePageURL = rootPageURL
+	}
 
 	// Use shared conversion pipeline with custom path
 	result := convertSinglePageWithPath(client, page, baseURL, outputPath, conversionOpts)
@@ -371,7 +374,7 @@ func convertPageTree(client confluence.Client, node *PageNode, outputDir string,
 
 	// Convert children
 	for _, child := range node.Children {
-		if err := convertPageTree(client, child, outputDir, baseURL, opts, results); err != nil {
+		if err := convertPageTree(client, child, outputDir, baseURL, rootPageID, rootPageURL, opts, results); err != nil {
 			return err
 		}
 	}

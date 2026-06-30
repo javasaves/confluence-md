@@ -25,6 +25,8 @@ type Converter struct {
 
 	// options
 	imageFolder string
+
+	confluenceBaseURL string
 }
 
 type Option func(*Converter)
@@ -73,6 +75,7 @@ func NewConverter(client confluence.Client, opts ...Option) *Converter {
 
 // ConvertHTML converts raw HTML string to Markdown
 func (c *Converter) ConvertHTML(html string) (string, error) {
+	c.confluenceBaseURL = ""
 	c.plugin.SetBaseURL("")
 	return c.convertHtml(html)
 }
@@ -82,15 +85,17 @@ func (c *Converter) ConvertPage(
 	page *confluenceModel.ConfluencePage,
 	baseURL string,
 	outputDir string,
+	sourcePageURL string,
 ) (*model.MarkdownDocument, error) {
 	if err := page.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid page: %w", err)
 	}
+	c.confluenceBaseURL = baseURL
 	c.plugin.SetBaseURL(baseURL)
 	c.plugin.SetCurrentPage(page)
 
 	// Create markdown document
-	doc, err := model.NewMarkdownDocument(page, baseURL)
+	doc, err := model.NewMarkdownDocument(page, baseURL, sourcePageURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create markdown document: %w", err)
 	}

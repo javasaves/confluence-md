@@ -66,6 +66,9 @@ type ConfluenceAPIPage struct {
 			} `json:"results"`
 		} `json:"attachment"`
 	} `json:"children"`
+	Links struct {
+		WebUI string `json:"webui"`
+	} `json:"_links"`
 }
 
 // ConfluenceSearchResult represents the API response for search queries
@@ -144,5 +147,6 @@ func ConvertAPIPageToModel(apiPage *ConfluenceAPIPage) *ConfluencePage {
 			DisplayName: apiPage.Version.By.DisplayName,
 			Email:       apiPage.Version.By.Email,
 		},
+		WebUIPath: apiPage.Links.WebUI,
 	}
 }

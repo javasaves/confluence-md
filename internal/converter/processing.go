@@ -15,6 +15,9 @@ import (
 func (c *Converter) convertHtml(html string) (string, error) {
 	processedHTML := c.preprocessCDATA(html)
 	processedHTML = rewriteInlineStructuredMacros(processedHTML)
+	if strings.TrimSpace(c.confluenceBaseURL) != "" {
+		processedHTML = preprocessConfluencePageAnchors(processedHTML, c.confluenceBaseURL)
+	}
 
 	md, err := c.mdConverter.ConvertString(processedHTML)
 	if err != nil {
@@ -28,7 +31,8 @@ func (c *Converter) convertHtml(html string) (string, error) {
 func (c *Converter) postprocessMarkdown(markdown string) string {
 	markdown = regexp.MustCompile(`\n{3,}`).ReplaceAllString(markdown, "\n\n")
 	markdown = fixNestedListSpacing(markdown)
-	markdown = fixMarkdownLinks(markdown)
+	markdown = fixMarkdownLinks(markdown, c.confluenceBaseURL)
+	markdown = fixHTMLAnchorLinks(markdown, c.confluenceBaseURL)
 
 	return strings.TrimSpace(markdown)
 }
@@ -59,10 +63,79 @@ func (c *Converter) extractImageReferences(html, pageID, baseURL string) []model
 	return imageRefs
 }
 
-// fixMarkdownLinks converts Confluence-specific links into internal references.
-func fixMarkdownLinks(markdown string) string {
-	confLinkRegex := regexp.MustCompile(`\[([^\]]+)\]\((?:/[^)/]+)*/spaces/([^/]+)/pages/(\d+)/[^)]+\)`)
-	return confLinkRegex.ReplaceAllString(markdown, "[$1](confluence://pageId/$3)")
+// fixMarkdownLinks prepends baseURL to root-relative Confluence page links without changing their paths.
+func fixMarkdownLinks(markdown, baseURL string) string {
+	if strings.TrimSpace(baseURL) == "" {
+		return markdown
+	}
+	return relConfluenceURLRegex.ReplaceAllStringFunc(markdown, func(match string) string {
+		sub := relConfluenceURLRegex.FindStringSubmatch(match)
+		if len(sub) < 2 || !isConfluencePageHref(sub[1]) {
+			return match
+		}
+		return "](" + plugin.EscapeMarkdownLinkURL(plugin.PrefixBaseURL(baseURL, sub[1])) + ")"
+	})
+}
+
+var (
+	anchorTagRegex         = regexp.MustCompile(`(?i)<a\b([^>]*)>([\s\S]*?)</a>`)
+	anchorHrefAttrRegex    = regexp.MustCompile(`(?i)\s+href=(?:"[^"]*"|'[^']*')`)
+	relConfluenceURLRegex  = regexp.MustCompile(`\]\((/(?:spaces/[^/]+/pages/\d+/[^)]*|pages/viewpage\.action[^)]*|display/[^)]+))\)`)
+)
+
+func fixHTMLAnchorLinks(markdown, baseURL string) string {
+	return anchorTagRegex.ReplaceAllStringFunc(markdown, func(match string) string {
+		sub := anchorTagRegex.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+
+		href := plugin.ExtractHrefFromAttrs(sub[1])
+		if href == "" || !isConfluencePageHref(href) {
+			return match
+		}
+
+		linkURL := plugin.PrefixBaseURL(baseURL, href)
+		text := plugin.HTMLFragmentText(sub[2])
+		if text == "" {
+			text = linkURL
+		}
+		return plugin.RenderMarkdownLinkString(text, linkURL)
+	})
+}
+
+func isConfluencePageHref(href string) bool {
+	if plugin.ExtractPageIDFromHref(href) != "" {
+		return true
+	}
+	if strings.Contains(href, "/spaces/") && strings.Contains(href, "/pages/") {
+		return true
+	}
+	return strings.HasPrefix(href, "/display/")
+}
+
+// preprocessConfluencePageAnchors rewrites rendered Confluence page anchors for markdown conversion.
+func preprocessConfluencePageAnchors(html, baseURL string) string {
+	return anchorTagRegex.ReplaceAllStringFunc(html, func(match string) string {
+		sub := anchorTagRegex.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+
+		attrs, inner := sub[1], sub[2]
+		href := plugin.ExtractHrefFromAttrs(attrs)
+		if href == "" || !isConfluencePageHref(href) {
+			return match
+		}
+
+		newHref := plugin.PrefixBaseURL(baseURL, href)
+		if newHref == "" {
+			newHref = href
+		}
+
+		cleaned := anchorHrefAttrRegex.ReplaceAllString(attrs, "")
+		return fmt.Sprintf(`<a href="%s"%s>%s</a>`, newHref, cleaned, inner)
+	})
 }
 
 // fixNestedListSpacing removes extraneous blank lines in nested lists.

@@ -320,6 +320,8 @@ If the rendered filename omits an extension, `.md` is appended automatically.
 | **Tables**          | Standard HTML tables       | Full table support with proper markdown formatting                      |
 | **Lists**           | Standard HTML lists        | Nested lists with proper indentation                                    |
 | **User Links**      | `ac:link` + `ri:user`      | Converted to `@DisplayName` (or `@user(account-id)` if name not cached) |
+| **Page Links**      | `ac:link` + `ri:page` / `ri:content-entity`, or rendered `<a href>` | Hrefs are preserved as in Confluence (`/pages/viewpage.action`, `/spaces/…/pages/…`, `/display/…`); with `page`/`tree` the site base URL is prepended |
+| **URL Links**       | `ac:link` + `ri:url`       | Converted to `[text](url)` using the `ri:value` attribute               |
 | **Time Elements**   | `<time>`                   | Datetime attribute extracted and displayed                              |
 | **Inline Comments** | `ac:inline-comment-marker` | Text preserved with comment reference                                   |
 | **Placeholders**    | `ac:placeholder`           | Converted to HTML comments                                              |

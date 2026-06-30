@@ -20,6 +20,7 @@ type ConfluencePage struct {
 	UpdatedAt   time.Time              `json:"updatedAt"`
 	CreatedBy   User                   `json:"createdBy"`
 	UpdatedBy   User                   `json:"updatedBy"`
+	WebUIPath   string                 `json:"-"` // relative path from Confluence _links.webui
 }
 
 // ConfluenceContent represents the content structure from Confluence
@@ -92,15 +93,45 @@ func (cp *ConfluencePage) Validate() error {
 
 // GetURL constructs the Confluence page URL
 func (cp *ConfluencePage) GetURL(baseURL string) (string, error) {
-	base, err := url.Parse(baseURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid base URL: %w", err)
+	base := strings.TrimSuffix(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		return "", fmt.Errorf("base URL cannot be empty")
 	}
 
-	pageURL := fmt.Sprintf("%s/spaces/%s/pages/%s/%s",
-		strings.TrimSuffix(base.String(), "/"), cp.SpaceKey, cp.ID, url.PathEscape(cp.Title))
+	if cp.WebUIPath != "" {
+		path := cp.WebUIPath
+		if !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+		parsed, err := url.Parse(base)
+		if err != nil {
+			return "", fmt.Errorf("invalid base URL: %w", err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return "", fmt.Errorf("invalid base URL: missing scheme or host")
+		}
+		return fmt.Sprintf("%s://%s%s", parsed.Scheme, parsed.Host, path), nil
+	}
 
+	pageURL := fmt.Sprintf("%s/spaces/%s/pages/%s/%s", base, cp.SpaceKey, cp.ID, cp.Title)
 	return pageURL, nil
+}
+
+// ExtractPageIDFromPageURL reads a Confluence page ID from a browser page URL.
+func ExtractPageIDFromPageURL(pageURL string) (string, error) {
+	u, err := url.Parse(pageURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %w", err)
+	}
+
+	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	for i, part := range pathParts {
+		if part == "pages" && i+1 < len(pathParts) {
+			return pathParts[i+1], nil
+		}
+	}
+
+	return "", fmt.Errorf("could not extract page ID from URL")
 }
 
 // GetLabelNames returns a slice of label names
@@ -144,8 +175,9 @@ func (ca *ConfluenceAttachment) Validate() error {
 
 // PageURLInfo contains information extracted from a Confluence page URL
 type PageURLInfo struct {
-	BaseURL  string
-	SpaceKey string
-	PageID   string
-	Title    string
+	BaseURL   string
+	SourceURL string
+	SpaceKey  string
+	PageID    string
+	Title     string
 }

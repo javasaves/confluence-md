@@ -77,9 +77,10 @@ func (md *MarkdownDocument) WithFrontmatter() (string, error) {
 	return builder.String(), nil
 }
 
-// NewMarkdownDocument creates a new MarkdownDocument from a ConfluencePage
-func NewMarkdownDocument(page *model.ConfluencePage, baseURL string) (*MarkdownDocument, error) {
-	pageURL, err := page.GetURL(baseURL)
+// NewMarkdownDocument creates a new MarkdownDocument from a ConfluencePage.
+// When sourcePageURL is provided and refers to the same page, it is used verbatim in frontmatter.
+func NewMarkdownDocument(page *model.ConfluencePage, baseURL, sourcePageURL string) (*MarkdownDocument, error) {
+	pageURL, err := resolveFrontmatterPageURL(page, baseURL, sourcePageURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate page URL: %w", err)
 	}
@@ -102,4 +103,13 @@ func NewMarkdownDocument(page *model.ConfluencePage, baseURL string) (*MarkdownD
 	}
 
 	return doc, nil
+}
+
+func resolveFrontmatterPageURL(page *model.ConfluencePage, baseURL, sourcePageURL string) (string, error) {
+	if sourcePageURL != "" {
+		if pageID, err := model.ExtractPageIDFromPageURL(sourcePageURL); err == nil && pageID == page.ID {
+			return sourcePageURL, nil
+		}
+	}
+	return page.GetURL(baseURL)
 }

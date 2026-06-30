@@ -231,10 +231,9 @@ func (p *ConfluencePlugin) flattenCellContent(ctx converter.Context, w *strings.
 		case html.ElementNode:
 			switch child.Data {
 			case "h1", "h2", "h3", "h4", "h5", "h6":
-				// Convert headings to bold text
-				w.WriteString("<strong>")
+				w.WriteString("**")
 				p.flattenCellContent(ctx, w, child)
-				w.WriteString("</strong>")
+				w.WriteString("**")
 			case "br":
 				w.WriteString("<br>")
 			case "p":
@@ -254,11 +253,20 @@ func (p *ConfluencePlugin) flattenCellContent(ctx converter.Context, w *strings.
 			case "ac:task-list":
 				// Handle Confluence task lists
 				p.flattenTaskList(ctx, w, child)
-			case "strong", "b", "em", "i", "code", "a":
-				// Preserve these inline elements
-				var buf strings.Builder
-				_ = html.Render(&buf, child)
-				w.WriteString(buf.String())
+			case "strong", "b":
+				w.WriteString("**")
+				p.flattenCellInline(ctx, w, child)
+				w.WriteString("**")
+			case "em", "i":
+				w.WriteString("*")
+				p.flattenCellInline(ctx, w, child)
+				w.WriteString("*")
+			case "code":
+				w.WriteString("`")
+				p.flattenCellInline(ctx, w, child)
+				w.WriteString("`")
+			case "a":
+				p.flattenInlineAnchor(ctx, w, child)
 			case "ac:structured-macro":
 				p.handleMacro(ctx, w, child)
 			case "ac:emoticon":
@@ -276,6 +284,53 @@ func (p *ConfluencePlugin) flattenCellContent(ctx converter.Context, w *strings.
 			default:
 				// For other elements, recursively flatten
 				p.flattenCellContent(ctx, w, child)
+			}
+		}
+	}
+}
+
+func (p *ConfluencePlugin) flattenInlineAnchor(ctx converter.Context, w *strings.Builder, n *html.Node) {
+	href := extractHrefAttr(n)
+	var inner strings.Builder
+	p.flattenCellInline(ctx, &inner, n)
+	linkURL := ResolveConfluencePageHref(href, p.confluenceBaseURL)
+	if linkURL == "" {
+		linkURL = href
+	}
+	text := strings.TrimSpace(inner.String())
+	if text == "" {
+		text = linkURL
+	}
+	w.WriteString(formatInlineLinkResult(n, renderMarkdownLinkString(text, linkURL)))
+}
+
+func (p *ConfluencePlugin) flattenCellInline(ctx converter.Context, w *strings.Builder, n *html.Node) {
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		switch child.Type {
+		case html.TextNode:
+			w.WriteString(child.Data)
+		case html.ElementNode:
+			switch child.Data {
+			case "strong", "b":
+				w.WriteString("**")
+				p.flattenCellInline(ctx, w, child)
+				w.WriteString("**")
+			case "em", "i":
+				w.WriteString("*")
+				p.flattenCellInline(ctx, w, child)
+				w.WriteString("*")
+			case "code":
+				w.WriteString("`")
+				p.flattenCellInline(ctx, w, child)
+				w.WriteString("`")
+			case "ac:link":
+				var linkOut strings.Builder
+				p.handleLink(ctx, &linkOut, child)
+				w.WriteString(linkOut.String())
+			case "a":
+				p.flattenInlineAnchor(ctx, w, child)
+			default:
+				p.flattenCellInline(ctx, w, child)
 			}
 		}
 	}
@@ -1106,32 +1161,129 @@ func (p *ConfluencePlugin) handleStatusMacro(n *html.Node) string {
 	return ""
 }
 
-// handleLink converts Confluence user links and other ac:link elements
-func (p *ConfluencePlugin) handleLink(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
-	// Look for ri:user child node
-	for child := n.FirstChild; child != nil; child = child.NextSibling {
-		if child.Type == html.ElementNode && child.Data == "ri:user" {
-			accountID := ""
-			for _, attr := range child.Attr {
-				if attr.Key == "ri:account-id" {
-					accountID = attr.Val
-					break
-				}
-			}
+func formatInlineLinkResult(n *html.Node, result string) string {
+	if n == nil || strings.TrimSpace(result) == "" {
+		return result
+	}
+	if needsLeadingInlineMacroSpace(n.PrevSibling) {
+		result = " " + result
+	}
+	if needsTrailingInlineMacroSpace(n.NextSibling) {
+		result += " "
+	}
+	return result
+}
 
-			if accountID != "" {
-				if displayName, ok := p.userCache[accountID]; ok {
-					_, _ = fmt.Fprintf(w, " @%s ", displayName)
-				} else {
-					// Fallback to account ID
-					_, _ = fmt.Fprintf(w, " @user(%s) ", accountID)
-				}
-				return converter.RenderTryNext
-			}
+func (p *ConfluencePlugin) extractLinkDisplayText(ctx converter.Context, n *html.Node, riPage *html.Node) string {
+	if text := extractConfluenceLinkText(n); text != "" {
+		return text
+	}
+
+	if linkBody := findDescendantElement(n, "ac:link-body"); linkBody != nil && ctx != nil {
+		var buf strings.Builder
+		for child := linkBody.FirstChild; child != nil; child = child.NextSibling {
+			ctx.RenderNodes(ctx, &buf, child)
+		}
+		if text := strings.TrimSpace(buf.String()); text != "" {
+			return text
 		}
 	}
 
-	// If not a user link, let default handler try
+	return extractContentTitle(riPage)
+}
+
+func (p *ConfluencePlugin) resolvePageLinkURL(riPage, riContentEntity *html.Node, linkTitle string) string {
+	var pageID, spaceKey, slugTitle string
+
+	if riContentEntity != nil {
+		pageID = extractContentID(riContentEntity)
+	}
+	if riPage != nil {
+		if pageID == "" {
+			pageID = extractPageID(riPage)
+		}
+		slugTitle = extractContentTitle(riPage)
+		spaceKey = extractSpaceKey(riPage)
+	}
+	if slugTitle == "" {
+		slugTitle = linkTitle
+	}
+	if spaceKey == "" && p.currentPage != nil {
+		spaceKey = p.currentPage.SpaceKey
+	}
+
+	var rel string
+	if pageID != "" {
+		rel = fmt.Sprintf("/pages/viewpage.action?pageId=%s", pageID)
+	} else if slugTitle != "" {
+		rel = BuildRelativePageTitleURL(spaceKey, slugTitle)
+	}
+	if rel != "" {
+		if p.confluenceBaseURL != "" {
+			return ResolveConfluencePageHref(rel, p.confluenceBaseURL)
+		}
+		return rel
+	}
+
+	return ""
+}
+
+// handleLink converts Confluence user, page, and URL links.
+func (p *ConfluencePlugin) handleLink(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	riUser := findDescendantElement(n, "ri:user")
+	if riUser != nil {
+		accountID := ""
+		for _, attr := range riUser.Attr {
+			if attr.Key == "ri:account-id" {
+				accountID = attr.Val
+				break
+			}
+		}
+		if accountID != "" {
+			if displayName, ok := p.userCache[accountID]; ok {
+				_, _ = fmt.Fprintf(w, " @%s ", displayName)
+			} else {
+				_, _ = fmt.Fprintf(w, " @user(%s) ", accountID)
+			}
+			return converter.RenderSuccess
+		}
+	}
+
+	riPage := findDescendantElement(n, "ri:page")
+	riContentEntity := findDescendantElement(n, "ri:content-entity")
+	if riPage != nil || riContentEntity != nil {
+		text := p.extractLinkDisplayText(ctx, n, riPage)
+		linkURL := p.resolvePageLinkURL(riPage, riContentEntity, text)
+		if linkURL != "" {
+			if text == "" {
+				text = extractContentTitle(riPage)
+			}
+			_, _ = w.WriteString(formatInlineLinkResult(n, renderMarkdownLinkString(text, linkURL)))
+			return converter.RenderSuccess
+		}
+		if text != "" {
+			_, _ = w.WriteString(formatInlineLinkResult(n, text))
+		} else {
+			_, _ = w.WriteString("<!-- broken page link -->")
+		}
+		return converter.RenderSuccess
+	}
+
+	riURL := findDescendantElement(n, "ri:url")
+	if riURL != nil {
+		urlValue := extractURLValue(riURL)
+		text := p.extractLinkDisplayText(ctx, n, nil)
+		if text == "" {
+			text = urlValue
+		}
+		if urlValue != "" {
+			_, _ = w.WriteString(formatInlineLinkResult(n, renderMarkdownLinkString(text, urlValue)))
+		} else if text != "" {
+			_, _ = w.WriteString(formatInlineLinkResult(n, text))
+		}
+		return converter.RenderSuccess
+	}
+
 	return converter.RenderTryNext
 }
 

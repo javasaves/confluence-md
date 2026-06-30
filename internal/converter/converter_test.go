@@ -54,7 +54,7 @@ func TestConverterConvertPage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc, err := conv.ConvertPage(tt.page, "https://example.atlassian.net", ".")
+			doc, err := conv.ConvertPage(tt.page, "https://example.atlassian.net", ".", "")
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
@@ -78,6 +78,36 @@ func TestConverterConvertPage(t *testing.T) {
 	}
 }
 
+func TestConverterConvertPageUsesBrowserPageLinks(t *testing.T) {
+	conv := NewConverter(nil)
+	page := &confModel.ConfluencePage{
+		ID:       "123",
+		Title:    "Sample Page",
+		SpaceKey: "SPACE",
+		Version:  1,
+		Content: confModel.ConfluenceContent{
+			Storage: confModel.ContentStorage{
+				Value: `<p>See <ac:link><ri:content-entity ri:content-id="999"/><ac:plain-text-link-body>Target</ac:plain-text-link-body></ac:link></p>`,
+			},
+		},
+		CreatedBy: confModel.User{DisplayName: "Author"},
+		UpdatedBy: confModel.User{DisplayName: "Editor"},
+	}
+	page.Content.Storage.Representation = "storage"
+	page.CreatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	page.UpdatedAt = time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	doc, err := conv.ConvertPage(page, "https://wiki.example.com", ".", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "https://wiki.example.com/pages/viewpage.action?pageId=999"
+	if !strings.Contains(doc.Content, want) {
+		t.Fatalf("expected browser page link %q in %q", want, doc.Content)
+	}
+}
+
 func TestConverterConvertPageDerivesJiraLinks(t *testing.T) {
 	conv := NewConverter(nil)
 	page := &confModel.ConfluencePage{
@@ -97,7 +127,7 @@ func TestConverterConvertPageDerivesJiraLinks(t *testing.T) {
 	page.CreatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	page.UpdatedAt = time.Date(2024, 1, 2, 3, 4, 5, 0, time.UTC)
 
-	doc, err := conv.ConvertPage(page, "https://confluence.example.com", ".")
+	doc, err := conv.ConvertPage(page, "https://confluence.example.com", ".", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -105,6 +135,90 @@ func TestConverterConvertPageDerivesJiraLinks(t *testing.T) {
 	want := "Before [ENG-123](https://jira.example.com/browse/ENG-123) after"
 	if !strings.Contains(doc.Content, want) {
 		t.Fatalf("expected jira link %q in markdown, got %q", want, doc.Content)
+	}
+}
+
+func TestConverterTableCellLinkInsideStrongAndSpanComplexCell(t *testing.T) {
+	conv := NewConverter(nil)
+	conv.confluenceBaseURL = "https://wiki.example.com"
+	conv.plugin.SetBaseURL("https://wiki.example.com")
+	conv.plugin.SetCurrentPage(&confModel.ConfluencePage{SpaceKey: "CORE"})
+
+	html := `<table><tbody><tr><td><p>Line one</p><p><strong>option_program.op_program<span style="color:var(--ds-text-accent-blue-bolder,#09326c);">_get<ac:link><ri:page ri:content-title="[Core][SQL][Таблица] option_program"></ri:page></ac:link></span></strong></p></td></tr></tbody></table>`
+
+	got, err := conv.convertHtml(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(got, "<ac:link>") {
+		t.Fatalf("expected ac:link converted in complex table cell, got %q", got)
+	}
+	if !strings.Contains(got, "https://wiki.example.com/display/CORE/") {
+		t.Fatalf("expected absolute page link, got %q", got)
+	}
+}
+
+func TestConverterConvertHTMLConfluencePageLinksRegression(t *testing.T) {
+	conv := NewConverter(nil)
+	conv.confluenceBaseURL = "https://wiki.example.com"
+	conv.plugin.SetBaseURL("https://wiki.example.com")
+	conv.plugin.SetCurrentPage(&confModel.ConfluencePage{SpaceKey: "CORE"})
+
+	html := `<ul>
+<li><p>Вызвать процедуру … со следующими… <ac:link><ri:page ri:content-title="[Core][SQL][ХП] op.program_get_by_prog_name"/></ac:link></p></li>
+</ul>
+<table>
+<tbody>
+<tr>
+<td><p><strong>option_program.op_program_get <ac:link><ri:page ri:content-title="[Core][SQL][Таблица] option_program"/></ac:link></strong></p></td>
+</tr>
+</tbody>
+</table>`
+
+	got, err := conv.convertHtml(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(got, "confluence://") {
+		t.Fatalf("expected browser links, still have confluence:// scheme in %q", got)
+	}
+	if !strings.Contains(got, "https://wiki.example.com/display/") {
+		t.Fatalf("expected display page links in %q", got)
+	}
+}
+
+func TestFixMarkdownLinksPreservesConfluenceScheme(t *testing.T) {
+	input := `See [Page](confluence://pageId/12345) for details`
+	got := fixMarkdownLinks(input, "https://wiki.example.com")
+	if got != input {
+		t.Fatalf("fixMarkdownLinks() = %q, want unchanged %q", got, input)
+	}
+}
+
+func TestFixMarkdownLinksPrefixesDisplayPath(t *testing.T) {
+	input := `See [Page](/display/CORE/My+Page) for details`
+	got := fixMarkdownLinks(input, "https://wiki.example.com")
+	want := `See [Page](https://wiki.example.com/display/CORE/My+Page) for details`
+	if got != want {
+		t.Fatalf("fixMarkdownLinks() = %q, want %q", got, want)
+	}
+}
+
+func TestConverterConvertHTMLConfluencePageLinkWithPlainTextBody(t *testing.T) {
+	conv := NewConverter(nil)
+
+	html := `<p><ac:link><ri:page ri:content-id="42" ri:content-title="fallback"/><ac:plain-text-link-body>Link [brackets] _text</ac:plain-text-link-body></ac:link></p>`
+
+	got, err := conv.ConvertHTML(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := `[Link \[brackets\] \_text](/pages/viewpage.action?pageId=42)`
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected plain-text page link %q in %q", want, got)
 	}
 }
 
@@ -301,33 +415,145 @@ func TestConverterPreprocessCDATA(t *testing.T) {
 
 func TestFixMarkdownLinks(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name    string
+		input   string
+		baseURL string
+		want    string
 	}{
 		{
-			name:  "root context",
+			name:  "root context internal without base",
 			input: "See [Page](/spaces/SPACE/pages/12345/Some-Page) for details",
-			want:  "See [Page](confluence://pageId/12345) for details",
+			want:  "See [Page](/spaces/SPACE/pages/12345/Some-Page) for details",
 		},
 		{
-			name:  "wiki context",
-			input: "See [Page](/wiki/spaces/SPACE/pages/12345/Some-Page) for details",
-			want:  "See [Page](confluence://pageId/12345) for details",
+			name:  "viewpage action without base",
+			input: "See [Page](/pages/viewpage.action?pageId=12345) for details",
+			want:  "See [Page](/pages/viewpage.action?pageId=12345) for details",
 		},
 		{
-			name:  "custom context",
-			input: "See [Page](/confluence/spaces/SPACE/pages/12345/Some-Page) for details",
-			want:  "See [Page](confluence://pageId/12345) for details",
+			name:    "spaces path absolute",
+			input:   "See [Page](/spaces/SPACE/pages/12345/Some-Page) for details",
+			baseURL: "https://wiki.example.com",
+			want:    "See [Page](https://wiki.example.com/spaces/SPACE/pages/12345/Some-Page) for details",
+		},
+		{
+			name:    "viewpage action absolute",
+			input:   "See [Page](/pages/viewpage.action?pageId=12345) for details",
+			baseURL: "https://wiki.example.com",
+			want:    "See [Page](https://wiki.example.com/pages/viewpage.action?pageId=12345) for details",
+		},
+		{
+			name:    "resolve confluence pageId scheme unchanged",
+			input:   "See [Page](confluence://pageId/12345) for details",
+			baseURL: "https://wiki.example.com",
+			want:    "See [Page](confluence://pageId/12345) for details",
+		},
+		{
+			name:    "escaped brackets in link text preserved",
+			input:   `See [\[Core\]\[SQL\] Arbitrary title](/spaces/SPACE/pages/12345/Some-Page) for details`,
+			baseURL: "https://wiki.example.com",
+			want:    `See [\[Core\]\[SQL\] Arbitrary title](https://wiki.example.com/spaces/SPACE/pages/12345/Some-Page) for details`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := fixMarkdownLinks(tt.input); got != tt.want {
-				t.Fatalf("fixMarkdownLinks(%q) = %q, want %q", tt.input, got, tt.want)
+			if got := fixMarkdownLinks(tt.input, tt.baseURL); got != tt.want {
+				t.Fatalf("fixMarkdownLinks(%q, %q) = %q, want %q", tt.input, tt.baseURL, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestConverterConvertHTMLConfluenceAnchorHref(t *testing.T) {
+	conv := NewConverter(nil)
+
+	html := `<p>Вызвать процедуру … <a href="/pages/viewpage.action?pageId=2842940999" data-linked-resource-id="2842940999" data-linked-resource-type="page">[Core][SQL][ХП] op.program_get_by_prog_name</a></p>`
+
+	got, err := conv.ConvertHTML(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(got, "/pages/viewpage.action?pageId=2842940999") {
+		t.Fatalf("expected view-style anchor as markdown link, got %q", got)
+	}
+	if !strings.Contains(got, "Вызвать процедуру … ") {
+		t.Fatalf("expected space preserved before link, got %q", got)
+	}
+}
+
+func TestConverterConvertHTMLConfluenceAnchorHrefSpacesPath(t *testing.T) {
+	conv := NewConverter(nil)
+	conv.confluenceBaseURL = "https://wiki.example.com"
+	conv.plugin.SetBaseURL("https://wiki.example.com")
+
+	html := `<p>See <a href="/spaces/XXXXX/pages/123456789/Asdfghj">Target</a> here</p>`
+
+	got, err := conv.convertHtml(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := `[Target](https://wiki.example.com/spaces/XXXXX/pages/123456789/Asdfghj)`
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected spaces-path anchor as absolute markdown link, got %q", got)
+	}
+}
+
+func TestConverterConvertHTMLConfluenceAnchorHrefWithBaseURL(t *testing.T) {
+	conv := NewConverter(nil)
+	conv.confluenceBaseURL = "https://wiki.example.com"
+	conv.plugin.SetBaseURL("https://wiki.example.com")
+
+	html := `<p>See <a href="/pages/viewpage.action?pageId=2842940999" data-linked-resource-id="2842940999" data-linked-resource-type="page">Target Page</a></p>`
+
+	got, err := conv.convertHtml(html)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(got, "https://wiki.example.com/pages/viewpage.action?pageId=2842940999") {
+		t.Fatalf("expected absolute page link, got %q", got)
+	}
+}
+
+func TestFixHTMLAnchorLinks(t *testing.T) {
+	input := `See <a href="/spaces/SPACE/pages/123456789/Asdfghj">Target</a> here`
+	got := fixHTMLAnchorLinks(input, "https://wiki.example.com")
+	want := `[Target](https://wiki.example.com/spaces/SPACE/pages/123456789/Asdfghj)`
+	if !strings.Contains(got, want) {
+		t.Fatalf("fixHTMLAnchorLinks() = %q, want substring %q", got, want)
+	}
+}
+
+func TestPreprocessConfluencePageAnchorsSpacesPath(t *testing.T) {
+	input := `<a href="/spaces/SPACE/pages/123/Title">Link</a>`
+	got := preprocessConfluencePageAnchors(input, "https://wiki.example.com")
+	want := `href="https://wiki.example.com/spaces/SPACE/pages/123/Title"`
+	if !strings.Contains(got, want) {
+		t.Fatalf("expected absolute spaces href, got %q", got)
+	}
+}
+
+func TestPreprocessConfluencePageAnchorsSingleQuotedHref(t *testing.T) {
+	input := `<a href='/pages/viewpage.action?pageId=42'>Title</a>`
+	got := preprocessConfluencePageAnchors(input, "https://wiki.example.com")
+	if !strings.Contains(got, `href="https://wiki.example.com/pages/viewpage.action?pageId=42"`) {
+		t.Fatalf("expected absolute href for single-quoted anchor, got %q", got)
+	}
+}
+
+func TestPreprocessConfluencePageAnchors(t *testing.T) {
+	input := `<a href="/pages/viewpage.action?pageId=42" data-linked-resource-id="42" data-linked-resource-type="page">Title</a>`
+	got := preprocessConfluencePageAnchors(input, "")
+	if !strings.Contains(got, `href="/pages/viewpage.action?pageId=42"`) {
+		t.Fatalf("expected relative href preserved, got %q", got)
+	}
+
+	got = preprocessConfluencePageAnchors(input, "https://wiki.example.com")
+	if !strings.Contains(got, `href="https://wiki.example.com/pages/viewpage.action?pageId=42"`) {
+		t.Fatalf("expected absolute href, got %q", got)
 	}
 }
 

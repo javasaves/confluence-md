@@ -50,7 +50,8 @@ type PageOptions struct {
 	authOptions
 	commonOptions
 
-	OutputNamer converter.OutputNamer
+	OutputNamer   converter.OutputNamer
+	SourcePageURL string
 }
 
 func init() {
@@ -117,6 +118,7 @@ func runPage(_ *cobra.Command, args []string) error {
 	}
 
 	// Use shared conversion pipeline
+	pageOpts.SourcePageURL = pageURL
 	result := convertSinglePage(
 		client,
 		page,

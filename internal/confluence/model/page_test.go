@@ -119,10 +119,34 @@ func TestConfluencePageGetURL(t *testing.T) {
 	}
 }
 
+func TestConfluencePageGetURLUsesWebUIPath(t *testing.T) {
+	page := validPage()
+	page.WebUIPath = "/wiki/spaces/SPACE/pages/123/Sample+Page+Title"
+
+	got, err := page.GetURL("https://example.atlassian.net/wiki")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "https://example.atlassian.net/wiki/spaces/SPACE/pages/123/Sample+Page+Title"
+	if got != want {
+		t.Fatalf("unexpected url: %s want %s", got, want)
+	}
+}
+
+func TestExtractPageIDFromPageURL(t *testing.T) {
+	got, err := ExtractPageIDFromPageURL("https://wiki.example.com/spaces/TEAM/pages/12345/My+Page")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "12345" {
+		t.Fatalf("unexpected page ID: %s", got)
+	}
+}
+
 func TestConfluencePageGetURLInvalidBase(t *testing.T) {
 	page := validPage()
-	if _, err := page.GetURL("://bad"); err == nil {
-		t.Fatal("expected error for invalid base url")
+	if _, err := page.GetURL(""); err == nil {
+		t.Fatal("expected error for empty base url")
 	}
 }
 

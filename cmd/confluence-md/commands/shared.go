@@ -78,7 +78,7 @@ func convertSinglePageWithPath(client confluence.Client, page *confluenceModel.C
 		options = append(options, converter.WithDownloadAttachments(opts.ImageFolder))
 	}
 	conv := converter.NewConverter(client, options...)
-	doc, err := conv.ConvertPage(page, baseURL, filepath.Dir(outputPath))
+	doc, err := conv.ConvertPage(page, baseURL, filepath.Dir(outputPath), opts.SourcePageURL)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to convert page: %w", err)
 		return result
@@ -158,9 +158,10 @@ func urlToPageInfo(pageURL string) (confluenceModel.PageURLInfo, error) {
 	}
 
 	return confluenceModel.PageURLInfo{
-		BaseURL:  baseURL,
-		PageID:   pageID,
-		SpaceKey: spaceKey,
-		Title:    title,
+		BaseURL:   baseURL,
+		SourceURL: pageURL,
+		PageID:    pageID,
+		SpaceKey:  spaceKey,
+		Title:     title,
 	}, nil
 }
